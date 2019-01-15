@@ -28,6 +28,15 @@ gROOT.SetBatch(1)
 gStyle.SetOptStat(0)
 
 
+class tower():
+    def __init__(self, position, energy):
+        self.position = position
+        self.energy = energy
+        self.neighbor_position = -1
+        self.neighbor_cluster = -1
+        self.cluster = -1
+
+
 class AnalizeCalorimeterEvent(object):
     def __init__(self, filename):
         # Create root file and open "filename" file
@@ -49,8 +58,8 @@ class AnalizeCalorimeterEvent(object):
         This method extracts data from ROOT file. Applies cuts on data and
         saves it as 2d array for each event.
         '''
-        # 2d array to save all the data
-        self.towers_arr = np.zeros((n_sectors, n_pads))
+
+        self.towers_list = []
 
         # Read all branches from the input ROOT file.
         id_arr = event.apv_id
@@ -61,13 +70,13 @@ class AnalizeCalorimeterEvent(object):
         apv_fit_t0 = event.apv_fit_t0
         apv_bint1 = event.apv_bint1
 
-        # Make local variables to improve speed. lul
+        # Make local variables to improve speed
         # Method calculates position of the signal
         position = self.position
         # Method calculated energy of the signal
         calib_energy = self.calib_energy
         # 2d array to save data
-        towers_arr = self.towers_arr
+        towers_list = self.towers_list
 
         # Loop through all signals in the event
         for hit in range(len(id_arr)):
@@ -88,203 +97,254 @@ class AnalizeCalorimeterEvent(object):
                 continue
 
             # Calculate energy of the event and write it in 2d array
-            towers_arr[sector, pad] += calib_energy(id_arr[hit], signal_arr[hit])
+            energy = calib_energy(id_arr[hit], signal_arr[hit])
+            if energy < 0:
+                return 0
+            for item in towers_list:
+                if item.position == (sector, pad):
+                    item.energy += energy
+                    break
+            else:
+                towers_list.append(tower((sector, pad), energy))
+
+            self.towers_list = towers_list
+        return 1
 
     def clustering_in_towers(self, merging='on'):
         '''
         This method does clustering to the input data - 2d array.
         '''
-        neighbors_arr = np.full((4, 64, 2), -1)
-        self.clusters_arr = np.full((4, 64), -1)
 
         # Optimization
-        clusters_arr = self.clusters_arr
-        towers_arr = self.towers_arr
-        amax = np.amax
-        argwhere = np.argwhere
-        collect_cluster = self.collect_cluster
-        merge_clusters = self.merge_clusters
+        towers_list = self.towers_list
+        # merge_clusters = self.merge_clusters
 
-        for (sec, pad), tower in np.ndenumerate(towers_arr):
-            if tower == 0:
-                continue
-            max_energy = amax(towers_arr[max(0, sec-1):min(n_sectors, sec+2), max(0, pad-1):min(n_pads, pad+2)])
-            neighbors_arr[sec, pad] = argwhere(towers_arr == max_energy)[0]
+        for item in towers_list:
+            center_sec, center_pad = item.position
+            neighbors = []
+            for item_neighbor in towers_list:
+                if (item_neighbor.position[0] in range(center_sec-1, center_sec+2)
+                   and item_neighbor.position[1] in range(center_pad-1, center_pad+2)):
+                    neighbors.append(item_neighbor)
+            neighbors_sorted = sorted(neighbors, key=lambda x: x.energy, reverse=True)
 
+            item.neighbor = neighbors_sorted[0]
+
+        towers_list = sorted(towers_list, key=lambda x: x.energy, reverse=True)
         cluster_idx = 0
-        start_energy = amax(towers_arr[clusters_arr == -1])
+        for item in towers_list:
+            if item.neighbor.position == item.position:
+                item.cluster = cluster_idx
+                cluster_idx += 1
 
-        while start_energy > 0:
-            hit_idx = argwhere(towers_arr == start_energy)[0]
-            collect_cluster(hit_idx, neighbors_arr, cluster_idx)
-            cluster_idx += 1
-            start_energy = amax(towers_arr[clusters_arr == -1])
-            if cluster_idx > 1000:
-                print('WEEEEEEEIRD EVENT!!!!!!!!!!!29441???')
-                break
-        if merging == 'on':
-            for cluster in range(amax(clusters_arr)):
-                merge_clusters(cluster, cluster+1)
+        n_non_clusters = -1
+        while n_non_clusters != 0:
+            n_non_clusters = 0
+            for item in towers_list:
+                if item.cluster == -1:
+                    n_non_clusters += 1
+                    if item.neighbor.cluster != -1:
+                        item.cluster = item.neighbor.cluster
 
-    def merge_clusters(self, cluster1, cluster2):
-        clusters_arr = self.clusters_arr
+        self.towers_list = towers_list
 
-        if not ((clusters_arr == cluster1).any()
-           and (clusters_arr == cluster2).any()):
-            pass
-        elif (self.get_sector_distance(cluster1, cluster2) < 1.5
-              and self.get_pad_distance(cluster1, cluster2) < 4.5):
-                # Make 0 cluster 1st, and then substarct 1
-            clusters_arr[clusters_arr == cluster1] = cluster2
-            for sec in range(n_sectors):
-                for pad in range(n_pads):
-                    if clusters_arr[sec, pad] >= cluster2:
-                        clusters_arr[sec, pad] -= 1
-            self.merge_clusters(cluster1, cluster2)
-        else:
-            self.merge_clusters(cluster1, cluster2+1)
+        # if merging == 'on':
+        #    for cluster in range(amax(clusters_arr)):
+        #        merge_clusters(cluster, cluster+1)
+
+    #def merge_clusters(self, cluster1, cluster2):
+    #    clusters_arr = self.clusters_arr
+
+    #    if not ((clusters_arr == cluster1).any()
+    #       and (clusters_arr == cluster2).any()):
+    #        pass
+    #    elif (self.get_sector_distance(cluster1, cluster2) < 1.5
+    #          and self.get_pad_distance(cluster1, cluster2) < 4.5):
+    #            # Make 0 cluster 1st, and then substarct 1
+    #        clusters_arr[clusters_arr == cluster1] = cluster2
+    #        for sec in range(n_sectors):
+    #            for pad in range(n_pads):
+    #                if clusters_arr[sec, pad] >= cluster2:
+    #                    clusters_arr[sec, pad] -= 1
+    #        self.merge_clusters(cluster1, cluster2)
+    #    else:
+    #        self.merge_clusters(cluster1, cluster2+1)
 
     def PlotCheck(self, event):
         h_key = 'check_event_{}'.format(event.apv_evt)
-        towers_arr = self.towers_arr
         h_dict = self.h_dict
         try:
-            for sec in range(n_sectors):
-                for pad in range(n_pads):
-                    h_dict[h_key].Fill(sec, pad, towers_arr[sec, pad])
+            for item in self.towers_list:
+                h_dict[h_key].Fill(item.position[0], item.position[1], item.energy)
         except KeyError:
+
             h_dict[h_key] = TH2F(h_key, '', 6, 0, 6, 64, 0, 64)
             h_dict[h_key].SetTitle('event_{};sector;pad'.format(event.apv_evt))
-            for sec in range(n_sectors):
-                for pad in range(n_pads):
-                    h_dict[h_key].Fill(sec, pad, towers_arr[sec, pad])
+            for item in self.towers_list:
+                h_dict[h_key].Fill(item.position[0], item.position[1], item.energy)
 
         c1 = TCanvas('c1', h_key, 1800, 1800)
-        h_dict[h_key].Draw("COLZ")
+        h_dict[h_key].Draw("COLZTEXT")
 
-        c1.Print('./check_events_pics/'+h_key+'.png')
+        c1.Print('./checks/'+h_key+'.png')
 
     def FillNclusters(self):
-        if (self.towers_arr >= 0).all():
-            h_key = 'h_n_clusters'
-            h_dict = self.h_dict
-            try:
-                h_dict[h_key].Fill(self.get_n_clusters())
-            except KeyError:
-                h_dict[h_key] = TH1F(h_key, '', 15, 0, 15)
-                h_dict[h_key].SetTitle('N clusters;N Clusters;N Events')
-                h_dict[h_key].Fill(self.get_n_clusters())
+        h_key = 'h_n_clusters'
+        h_dict = self.h_dict
+        try:
+            h_dict[h_key].Fill(self.get_n_clusters())
+        except KeyError:
+            h_dict[h_key] = TH1F(h_key, '', 15, 0, 15)
+            h_dict[h_key].SetTitle('N clusters;N Clusters;N Events')
+            h_dict[h_key].Fill(self.get_n_clusters())
 
     def FillClusterEnergy(self, cluster):
-        if ((self.clusters_arr == cluster).any()
-           and (self.towers_arr >= 0).all()):
-            h_dict = self.h_dict
-            h_key = 'h_energy_{}'.format(cluster+1)
-            try:
-                h_dict[h_key].Fill(self.get_cluster_energy(cluster))
-            except KeyError:
-                h_dict[h_key] = TH1F(h_key, '', 2000, 0, 500)
-                h_dict[h_key].SetTitle('Energy: {} clust;Energy [MIP];N events'.format(cluster+1))
-                h_dict[h_key].Fill(self.get_cluster_energy(cluster))
+        for item in self.towers_list:
+            if item.cluster == cluster:
+                break
+        else:
+            return 0
+
+        h_dict = self.h_dict
+        h_key = 'h_energy_{}'.format(cluster+1)
+        try:
+            h_dict[h_key].Fill(self.get_cluster_energy(cluster))
+        except KeyError:
+            h_dict[h_key] = TH1F(h_key, '', 2000, 0, 500)
+            h_dict[h_key].SetTitle('Energy: {} clust;Energy [MIP];N events'.format(cluster+1))
+            h_dict[h_key].Fill(self.get_cluster_energy(cluster))
 
     def Fill1PadEnergy(self):
-        if (self.towers_arr >= 0).all():
-            h_dict = self.h_dict
-            get_cluster_n_pads = self.get_cluster_n_pads
-            get_cluster_energy = self.get_cluster_energy
-            h_key = 'h_energy_1pad'
-            try:
-                for cluster in range(self.get_n_clusters()):
-                    if get_cluster_n_pads(cluster) == 1:
-                        h_dict[h_key].Fill(get_cluster_energy(cluster))
-            except KeyError:
-                h_dict[h_key] = TH1F(h_key, '', 2000, 0, 100)
-                h_dict[h_key].SetTitle('Energy: 1 pad clusters;Energy [MIP];N events')
-                for cluster in range(self.get_n_clusters()):
-                    if get_cluster_n_pads(cluster) == 1:
-                        h_dict[h_key].Fill(get_cluster_energy(cluster))
+        h_dict = self.h_dict
+        get_cluster_n_pads = self.get_cluster_n_pads
+        get_cluster_energy = self.get_cluster_energy
+        h_key = 'h_energy_1pad'
+        try:
+            for cluster in range(self.get_n_clusters()):
+                if get_cluster_n_pads(cluster) == 1:
+                    h_dict[h_key].Fill(get_cluster_energy(cluster))
+        except KeyError:
+            h_dict[h_key] = TH1F(h_key, '', 2000, 0, 100)
+            h_dict[h_key].SetTitle('Energy: 1 pad clusters;Energy [MIP];N events')
+            for cluster in range(self.get_n_clusters()):
+                if get_cluster_n_pads(cluster) == 1:
+                    h_dict[h_key].Fill(get_cluster_energy(cluster))
 
     def FillClusterPadPos(self, cluster):
-        if ((self.towers_arr >= 0).all()
-           and (self.clusters_arr == cluster).any()):
-            h_dict = self.h_dict
-            h_key = 'h_position_{}'.format(cluster+1)
-            try:
-                h_dict[h_key].Fill(self.get_cluster_pad_pos(cluster))
-            except KeyError:
-                h_dict[h_key] = TH1F(h_key, '', 200, 0, 64)
-                h_dict[h_key].SetTitle('Position: {} cluster;pos [pad];N events'.format(cluster+1))
-                h_dict[h_key].Fill(self.get_cluster_pad_pos(cluster))
+        for item in self.towers_list:
+            if item.cluster == cluster:
+                break
+        else:
+            return 0
+        h_dict = self.h_dict
+        h_key = 'h_position_{}'.format(cluster+1)
+        try:
+            h_dict[h_key].Fill(self.get_cluster_pad_pos(cluster))
+        except KeyError:
+            h_dict[h_key] = TH1F(h_key, '', 200, 0, 64)
+            h_dict[h_key].SetTitle('Position: {} cluster;pos [pad];N events'.format(cluster+1))
+            h_dict[h_key].Fill(self.get_cluster_pad_pos(cluster))
 
     def FillClusterNPads(self, cluster):
-        if ((self.towers_arr >= 0).all()
-           and (self.clusters_arr == cluster).any()):
-            h_dict = self.h_dict
-            h_key = 'h_npads_{}'.format(cluster+1)
-            try:
-                h_dict[h_key].Fill(self.get_cluster_n_pads(cluster))
-            except KeyError:
-                h_dict[h_key] = TH1F(h_key, '', 25, 0, 25)
-                h_dict[h_key].SetTitle('N pads: {} cluster;N pads;N events'.format(cluster+1))
-                h_dict[h_key].Fill(self.get_cluster_n_pads(cluster))
+        for item in self.towers_list:
+            if item.cluster == cluster:
+                break
+        else:
+            return 0
+        h_dict = self.h_dict
+        h_key = 'h_npads_{}'.format(cluster+1)
+        try:
+            h_dict[h_key].Fill(self.get_cluster_n_pads(cluster))
+        except KeyError:
+            h_dict[h_key] = TH1F(h_key, '', 25, 0, 25)
+            h_dict[h_key].SetTitle('N pads: {} cluster;N pads;N events'.format(cluster+1))
+            h_dict[h_key].Fill(self.get_cluster_n_pads(cluster))
 
     def FillClusterDistance(self, cluster1, cluster2):
-        if ((self.towers_arr >= 0).all()
-           and (self.clusters_arr == cluster1).any()
-           and (self.clusters_arr == cluster2).any()):
-            h_dict = self.h_dict
-            h_key = 'h_distance_{}_vs_{}'.format(cluster1+1, cluster2+1)
-            try:
-                h_dict[h_key].Fill(self.get_pad_distance(cluster1, cluster2))
-            except KeyError:
-                h_dict[h_key] = TH1F(h_key, '', 400, 0, 60)
-                self.h_dict[h_key].SetTitle('Distance between: {} and {} clusters;N pads;\
-                                                N events'.format(cluster1+1, cluster2+1))
-                h_dict[h_key].Fill(self.get_pad_distance(cluster1, cluster2))
+        ok1, ok2 = 0, 0
+        for item in self.towers_list:
+            if item.cluster == cluster1:
+                ok1 = 1
+            elif item.cluster == cluster2:
+                ok2 = 1
+            if ok1 == 1 and ok2 == 1:
+                break
+        else:
+            return 0
+        h_dict = self.h_dict
+        h_key = 'h_distance_{}_vs_{}'.format(cluster1+1, cluster2+1)
+        try:
+            h_dict[h_key].Fill(self.get_pad_distance(cluster1, cluster2))
+        except KeyError:
+            h_dict[h_key] = TH1F(h_key, '', 400, 0, 60)
+            self.h_dict[h_key].SetTitle('Distance between: {} and {} clusters;N pads;\
+                                            N events'.format(cluster1+1, cluster2+1))
+            h_dict[h_key].Fill(self.get_pad_distance(cluster1, cluster2))
 
     def FillClusterRatio(self, cluster1, cluster2):
-        if ((self.towers_arr >= 0).all()
-           and (self.clusters_arr == cluster1).any()
-           and (self.clusters_arr == cluster2).any()):
-            h_dict = self.h_dict
-            h_key = 'h_ratio_{}_over_{}'.format(cluster2+1, cluster1+1)
-            try:
-                h_dict[h_key].Fill(self.get_energy_ratio(cluster1, cluster2))
-            except KeyError:
-                h_dict[h_key] = TH1F(h_key, '', 400, 0, 1)
-                h_dict[h_key].SetTitle('Energy ratio: {} over {} clusters;Ratio;\
-                                        N events'.format(cluster2+1, cluster1+1))
-                h_dict[h_key].Fill(self.get_energy_ratio(cluster1, cluster2))
+        ok1, ok2 = 0, 0
+        for item in self.towers_list:
+            if item.cluster == cluster1:
+                ok1 = 1
+            elif item.cluster == cluster2:
+                ok2 = 1
+            if ok1 == 1 and ok2 == 1:
+                break
+        else:
+            return 0
+        h_dict = self.h_dict
+        h_key = 'h_ratio_{}_over_{}'.format(cluster2+1, cluster1+1)
+        try:
+            h_dict[h_key].Fill(self.get_energy_ratio(cluster1, cluster2))
+        except KeyError:
+            h_dict[h_key] = TH1F(h_key, '', 400, 0, 1)
+            h_dict[h_key].SetTitle('Energy ratio: {} over {} clusters;Ratio;\
+                                    N events'.format(cluster2+1, cluster1+1))
+            h_dict[h_key].Fill(self.get_energy_ratio(cluster1, cluster2))
 
     def FillClusterInverseRatio(self, cluster1, cluster2):
-        if ((self.towers_arr >= 0).all()
-           and (self.clusters_arr == cluster1).any()
-           and (self.clusters_arr == cluster2).any()):
-            h_dict = self.h_dict
-            h_key = 'h__inverse_ratio_{}_over_{}'.format(cluster2+1, cluster1+1)
-            try:
-                h_dict[h_key].Fill(1/self.get_energy_ratio(cluster1, cluster2))
-            except KeyError:
-                h_dict[h_key] = TH1F(h_key, '', 400, 0, 200)
-                h_dict[h_key].SetTitle('Inverse Energy ratio: {} over {} clusters;Ratio;\
-                                        N events'.format(cluster2+1, cluster1+1))
-                h_dict[h_key].Fill(1/self.get_energy_ratio(cluster1, cluster2))
+        ok1, ok2 = 0, 0
+        for item in self.towers_list:
+            if item.cluster == cluster1:
+                ok1 = 1
+            elif item.cluster == cluster2:
+                ok2 = 1
+            if ok1 == 1 and ok2 == 1:
+                break
+        else:
+            return 0
+        h_dict = self.h_dict
+        h_key = 'h__inverse_ratio_{}_over_{}'.format(cluster2+1, cluster1+1)
+        try:
+            h_dict[h_key].Fill(1/self.get_energy_ratio(cluster1, cluster2))
+        except KeyError:
+            h_dict[h_key] = TH1F(h_key, '', 400, 0, 200)
+            h_dict[h_key].SetTitle('Inverse Energy ratio: {} over {} clusters;Ratio;\
+                                    N events'.format(cluster2+1, cluster1+1))
+            h_dict[h_key].Fill(1/self.get_energy_ratio(cluster1, cluster2))
 
     def FillClusterDistVsRatio(self, cluster1, cluster2):
-        if ((self.towers_arr >= 0).all()
-           and (self.clusters_arr == cluster1).any()
-           and (self.clusters_arr == cluster2).any()):
-            h_dict = self.h_dict
-            h_key = 'h_dist_ratio_for_{}_and_{}'.format(cluster1+1, cluster2+1)
-            try:
-                h_dict[h_key].Fill(self.get_pad_distance(cluster1, cluster2),
-                                   self.get_energy_ratio(cluster1, cluster2))
-            except KeyError:
-                h_dict[h_key] = TH2F(h_key, '', 400, 0, 60, 400, 0, 1)
-                h_dict[h_key].SetTitle('Distance vs ratio: {} and {} clusters;Distance;\
-                                        Ratio;N Events'.format(cluster1+1, cluster2+1))
-                h_dict[h_key].Fill(self.get_pad_distance(cluster1, cluster2),
-                                   self.get_energy_ratio(cluster1, cluster2))
+        ok1, ok2 = 0, 0
+        for item in self.towers_list:
+            if item.cluster == cluster1:
+                ok1 = 1
+            elif item.cluster == cluster2:
+                ok2 = 1
+            if ok1 == 1 and ok2 == 1:
+                break
+        else:
+            return 0
+        h_dict = self.h_dict
+        h_key = 'h_dist_ratio_for_{}_and_{}'.format(cluster1+1, cluster2+1)
+        try:
+            h_dict[h_key].Fill(self.get_pad_distance(cluster1, cluster2),
+                               self.get_energy_ratio(cluster1, cluster2))
+        except KeyError:
+            h_dict[h_key] = TH2F(h_key, '', 400, 0, 60, 400, 0, 1)
+            h_dict[h_key].SetTitle('Distance vs ratio: {} and {} clusters;Distance;\
+                                    Ratio;N Events'.format(cluster1+1, cluster2+1))
+            h_dict[h_key].Fill(self.get_pad_distance(cluster1, cluster2),
+                               self.get_energy_ratio(cluster1, cluster2))
 
     # Secondary methods
     def position(self, apv_id, apv_channel):
@@ -378,74 +438,47 @@ class AnalizeCalorimeterEvent(object):
 
         return graph.Eval(signal)
 
-    def collect_cluster(self, hit_idx, neighbors, cluster_idx):
-        clusters_arr = self.clusters_arr
-        all = np.all
-        clusters_arr[hit_idx[0], hit_idx[1]] = cluster_idx
-        for sec in range(n_sectors):
-            for pad in range(n_pads):
-                if (all(neighbors[sec, pad] == hit_idx)
-                   and clusters_arr[sec, pad] == -1):
-                    self.collect_cluster((sec, pad), neighbors, cluster_idx)
-
     # Get functions
 
     def get_n_clusters(self):
-        if (self.towers_arr >= 0).all():
-            return np.amax(self.clusters_arr)+1
-        else:
-            return -1000
+        cluster_list = [item.cluster for item in self.towers_list]
+        if not cluster_list:
+            return 0
+        return max(cluster_list)+1
 
     def get_cluster_energy(self, cluster):
-        if not ((self.clusters_arr == cluster).any()
-                and (self.towers_arr >= 0).all()):
-            return -1000
-        return np.sum(self.towers_arr[self.clusters_arr == cluster])
+        energy_list = [item.energy for item in self.towers_list if item.cluster == cluster]
+        # If no cluster returns 0
+        return sum(energy_list)
 
     def get_cluster_pad_pos(self, cluster):
-        if not ((self.clusters_arr == cluster).any()
-                and (self.towers_arr >= 0).all()):
-            return -1000
-        clusters_arr = self.clusters_arr
-        towers_arr = self.towers_arr
 
         cluster_pos = 0
         cluster_energy = self.get_cluster_energy(cluster)
-        for sec in range(n_sectors):
-            for pad in range(n_pads):
-                if clusters_arr[sec, pad] != cluster:
-                    continue
-                cluster_pos += pad*towers_arr[sec, pad]/cluster_energy
+        pos_energy_list = [(item.position[1], item.energy) for item in self.towers_list if item.cluster == cluster]
+
+        for pos_energy in pos_energy_list:
+            cluster_pos += pos_energy[0]*pos_energy[1]/cluster_energy
+        # if no cluster returns 0 pos
         return cluster_pos
 
     def get_cluster_sector_pos(self, cluster):
-        if not ((self.clusters_arr == cluster).any()
-                and (self.towers_arr >= 0).all()):
-            return -1000
-        clusters_arr = self.clusters_arr
-        towers_arr = self.towers_arr
 
         cluster_pos = 0
         cluster_energy = self.get_cluster_energy(cluster)
-        for sec in range(n_sectors):
-            for pad in range(n_pads):
-                if clusters_arr[sec, pad] != cluster:
-                    continue
-                cluster_pos += sec*towers_arr[sec, pad]/cluster_energy
+        pos_energy_list = [(item.position[0], item.energy) for item in self.towers_list if item.cluster == cluster]
+
+        for pos_energy in pos_energy_list:
+            cluster_pos += pos_energy[0]*pos_energy[1]/cluster_energy
+        # if no cluster returns 0 pos
         return cluster_pos
 
     def get_cluster_n_pads(self, cluster):
-        if not ((self.clusters_arr == cluster).any()
-                and (self.towers_arr >= 0).all()):
-            return -1000
-        return np.sum(self.clusters_arr == cluster)
+        n_pads_list = [item for item in self.towers_list if item.cluster == cluster]
+        # Returns 0 if no clusters
+        return len(n_pads_list)
 
     def get_pad_distance(self, cluster1, cluster2):
-        clusters_arr = self.clusters_arr
-        if not ((clusters_arr == cluster1).any()
-                and (clusters_arr == cluster2).any()
-                and (self.towers_arr >= 0).all()):
-            return -1000
         get_cluster_pad_pos = self.get_cluster_pad_pos
         position1 = get_cluster_pad_pos(cluster1)
         position2 = get_cluster_pad_pos(cluster2)
@@ -453,23 +486,13 @@ class AnalizeCalorimeterEvent(object):
         return abs(position1-position2)
 
     def get_sector_distance(self, cluster1, cluster2):
-        clusters_arr = self.clusters_arr
-        if not ((clusters_arr == cluster1).any()
-                and (clusters_arr == cluster2).any()
-                and (self.towers_arr >= 0).all()):
-            return -1000
         get_cluster_sector_pos = self.get_cluster_sector_pos
         position1 = get_cluster_sector_pos(cluster1)
         position2 = get_cluster_sector_pos(cluster2)
-        # This is only projection on pad distance!
+        # This is only projection on sector distance!
         return abs(position1-position2)
 
     def get_energy_ratio(self, cluster1, cluster2):
-        clusters_arr = self.clusters_arr
-        if not ((clusters_arr == cluster1).any()
-                and (clusters_arr == cluster2).any()
-                and (self.towers_arr >= 0).all()):
-            return -1000
         get_cluster_energy = self.get_cluster_energy
         energy1 = get_cluster_energy(cluster1)
         energy2 = get_cluster_energy(cluster2)
@@ -602,19 +625,21 @@ def main():
     n_events = Analizer.tree.GetEntries()
 
     for idx, event in enumerate(Analizer.tree):
-        if idx != 200:
+        #if idx == 2000:
+        #    break
+
+        if idx % (300) == 0:
+            time_min = (time.time()-start_time) // 60
+            time_sec = (time.time()-start_time) % 60
+            print('%(idx)i/%(n_events)i events' % locals(), end=' ')
+            print('%(time_min)i min' % locals(), end=' ')
+            print('%(time_sec)i sec' % locals())
+
+        check = Analizer.extract_data(event)
+        if check == 0:
             continue
 
-        #if idx % (100) == 0:
-        #    time_min = (time.time()-start_time) // 60
-        #    time_sec = (time.time()-start_time) % 60
-        #    print('%(idx)i/%(n_events)i events' % locals(), end=' ')
-        #    print('%(time_min)i min' % locals(), end=' ')
-        #    print('%(time_sec)i sec' % locals())
-
-        Analizer.extract_data(event)
-
-        Analizer.PlotCheck(event)
+        # Analizer.PlotCheck(event)
 
         Analizer.clustering_in_towers(merging='off')
 
@@ -631,22 +656,11 @@ def main():
             Analizer.FillClusterPadPos(cluster)
             Analizer.FillClusterNPads(cluster)
 
-    #output_file = TFile('output_new.root', 'update')
+    output_file = TFile('output_new.root', 'update')
 
-    #for key in Analizer.h_dict.keys():
-    #    Analizer.h_dict[key].Write()
+    for key in Analizer.h_dict.keys():
+        Analizer.h_dict[key].Write()
 
-    # if Analizer.get_energy_ratio(0, 1) > 0.8 and Analizer.get_pad_distance(0, 1) > 10:
-    #    Analizer.PlotCheck(event)
-    #    print('Plot:', event.apv_evt)
-
-    # if Analizer.get_energy_ratio(0, 2) > 0.8:
-    #    Analizer.PlotCheck(event)
-    #    print('Plot:', event.apv_evt)
-
-    # if Analizer.get_energy_ratio(0, 3) > 0.7:
-    #    Analizer.PlotCheck(event)
-    #    print('Plot:', event.apv_evt)
     input('Wait')
 
 
