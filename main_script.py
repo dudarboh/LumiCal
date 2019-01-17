@@ -1,15 +1,16 @@
 '''
-This file does analysis of cluster reconstruction in calorimeter and trackers
-signals in coresponded functions cluster_analysis(), tracker_analysis().
-To start this script user needs all imported libraries. Python3 with root.
-P.S. It may work with python2. But it may HAVE BUGS!!! Because in python2:
-1/2=0, when in python3 1/2=0.5 and so on... + python2 slower x4 times. So adapt
-to use python3. You will need ROOT with python3. If it works only with python2
-but not python3. You have to reinstall it and compile source (dont use binary)
-with python3 executable/library/include paths provided in ./configure stage.
-Include directory for me was tricky: /path/to/python/include/python3.7m. So
-play
-round it.
+This script was written to analise data of the LumiCal test beam runs of 2016.
+It's input - root files with signals and apvs' information provided by
+Sasha's Borisov readout system.
+Script has been tested with: root v6.14/06 and python 3.7.2.
+Time needed is ~18 minutes for 50000 events.
+Script can do the following:
+1)Show 2d map of signals distribution in the event
+2)Do clustering of signals in calorimeter using "linking neighbors" algorithm.
+3)Calculate and plot various distributions: Number of clusters/Energy/Position/
+Distance between clusters/etc. distributions
+4) Show 2d map of signals in the both trackers plane.
+5) Plot energy distribution in the trackets and fit it with Landau-Gaus convolution function. (BROKEN IN THE MOMENT)
 '''
 
 from ROOT import TH1F, TH2F, TF1, TGraphErrors, TFile, gROOT, TCanvas, TColor, gStyle
@@ -24,11 +25,14 @@ start_time = time.time()
 
 # Dont draw pictures in the end
 gROOT.SetBatch(1)
-# Dont draw statistics of histograms
-# gStyle.SetOptStat(0)
 
 
 class tower():
+    '''
+    Class to store information about signals in the event.
+    It's position, energy, closest high-energy neighbor,
+    cluster number of the signal
+    '''
     def __init__(self, position, energy):
         self.position = position
         self.energy = energy
@@ -38,6 +42,18 @@ class tower():
 
 
 class AnalizeCalorimeterEvent(object):
+    '''
+    This class does calorimeter analysis:
+    1) Extracts hits from imput root file (method extract_data)
+    2.1) Gives every hit corresponding cluster number (method clustering_in_towers())
+    2.2.) Merge some slucsters if some user's conditions are satisfied
+    3) PlotCheck(), PlotClusterCheck() - plot 2d map of signals of 1 event.
+    4) Fillxxx() - Fills histograms with corresponding values
+    5) getxxx() - Compute corresponding value for the event
+    6) position(), calib_energy() - calculate position and energy of the signal
+    based on the input root file.
+    7) merge_clusters() - merges all clusters.
+    '''
     def __init__(self, filename):
         # Create root file and open "filename" file
         self.file = TFile.Open(filename)
@@ -45,20 +61,13 @@ class AnalizeCalorimeterEvent(object):
         # Read a TTree from this file
         self.tree = self.file.apv_reco
 
-        # Create dictionary for all histograms
+        # Create dictionary to store all histograms
         self.h_dict = {}
-
-    # Special methods for losers
-    def __getitem__(self, key):
-        return getattr(self, key)
 
     # Primary methods
     def extract_data(self, event):
-        '''
-        This method extracts data from ROOT file. Applies cuts on data and
-        saves it as 2d array for each event.
-        '''
 
+        # List for signals data
         self.towers_list = []
 
         # Read all branches from the input ROOT file.
@@ -71,19 +80,16 @@ class AnalizeCalorimeterEvent(object):
         apv_bint1 = event.apv_bint1
 
         # Make local variables to improve speed
-        # Method calculates position of the signal
         position = self.position
-        # Method calculated energy of the signal
         calib_energy = self.calib_energy
-        # 2d array to save data
         towers_list = self.towers_list
 
-        # Loop through all signals in the event
+        # Loop through all signals(hits) in the event
         for hit in range(len(id_arr)):
-            # Calculate position of the signal
+            # Calculate sector, pad and layer(position) of the signal
             sector, pad, layer = position(id_arr[hit], channel_arr[hit])
 
-            # Cuts. Analize only calorimeter, do geometry cuts and bad mapping cut
+            # Cuts. Analize: only calorimeter(layer>=2), only 2 central sectors, exclude bad mapping(pad<0)
             if (layer < 2
                or sector == 0 or sector == 4
                or (sector == 1 and pad < 20)
@@ -96,10 +102,15 @@ class AnalizeCalorimeterEvent(object):
                or apv_fit_t0[hit] > (apv_bint1[hit]-0.5)):
                 continue
 
-            # Calculate energy of the event and write it in 2d array
+            # Calculate energy of the event in MIPs
             energy = calib_energy(id_arr[hit], signal_arr[hit])
+
+            # If bad event: skip it
             if energy < 0:
                 return 0
+
+            # If signal for this sector,pad(NOT layer!) is in list: add energy
+            # Else: Add this signal to list and add energy
             for item in towers_list:
                 if item.position == (sector, pad):
                     item.energy += energy
@@ -107,82 +118,121 @@ class AnalizeCalorimeterEvent(object):
             else:
                 towers_list.append(tower((sector, pad), energy))
 
+            # Write everything in global variable
             self.towers_list = towers_list
+
+        # Return 1 if everything alright
         return 1
 
     def clustering_in_towers(self, merge='on'):
-        '''
-        This method does clustering to the input data - 2d array.
-        '''
 
-        # Optimization
+        # Make local variables to inprove speed.
         towers_list = self.towers_list
         merge_clusters = self.merge_clusters
 
-        for item in towers_list:
-            center_sec, center_pad = item.position
+        # for sll signals1 in the list:
+        for signal in towers_list:
+            # define position of this signal
+            center_sec, center_pad = signal.position
+            # create empty list for its neighbors
             neighbors = []
-            for item_neighbor in towers_list:
-                if (item_neighbor.position[0] in range(center_sec-1, center_sec+2)
-                   and item_neighbor.position[1] in range(center_pad-1, center_pad+2)):
-                    neighbors.append(item_neighbor)
+
+            # for all signals2 in the list
+            for signal_neighbor in towers_list:
+                # If signal2 is neighbor to signal1 (or signal2 == signal1) add it to neighbors list.
+                # Signal2 can be signal1! If it is the most energetic among its neighbors
+                if (signal_neighbor.position[0] in range(center_sec-1, center_sec+2)
+                   and signal_neighbor.position[1] in range(center_pad-1, center_pad+2)):
+                    neighbors.append(signal_neighbor)
+
+            # Sort neighbors
             neighbors_sorted = sorted(neighbors, key=lambda x: x.energy, reverse=True)
 
-            item.neighbor = neighbors_sorted[0]
+            # Pass the highest energetic neighbor to signal1 attribute "neighbor"
+            signal.neighbor = neighbors_sorted[0]
 
+        # Sort all signals by energy
         towers_list = sorted(towers_list, key=lambda x: x.energy, reverse=True)
+
         cluster_idx = 0
-        for item in towers_list:
-            if item.neighbor.position == item.position:
-                item.cluster = cluster_idx
+        # For signal1 in data list
+        for signal in towers_list:
+            # If the neighbor of signal1 is signal1. (Means it local maximum)
+            # Mark it as seed (give it cluster_index = 0, 1, 2, ...)
+            if signal.neighbor.position == signal.position:
+                signal.cluster = cluster_idx
                 cluster_idx += 1
 
+        # Variable to count number of non-cluster sigmals left
         n_non_clusters = -1
+        # Stop when all signals got some cluster_index
         while n_non_clusters != 0:
             n_non_clusters = 0
-            for item in towers_list:
-                if item.cluster == -1:
+            # for signal in data list
+            for signal in towers_list:
+                # If signal is not in a cluster: +1 to non_cluster counter
+                # If the highest energetic neighbor of signal is in cluster
+                # Add this signal to the same cluster
+                if signal.cluster == -1:
                     n_non_clusters += 1
-                    if item.neighbor.cluster != -1:
-                        item.cluster = item.neighbor.cluster
+                    if signal.neighbor.cluster != -1:
+                        signal.cluster = signal.neighbor.cluster
 
+        # Write updated data to the global variable
         self.towers_list = towers_list
 
+        # If merge clusters option is on:
         if merge == 'on':
             cluster1, cluster2 = 0, 0
             n_clusters = self.get_n_clusters()
+            # Loops through all pairs of clusters
             while cluster1 in range(n_clusters):
                 cluster2 = cluster1+1
                 while cluster2 in range(n_clusters):
+                    # For this pair: merge clusters()
                     merge_clusters(cluster1, cluster2)
                     cluster2 += 1
                 cluster1 += 1
 
     def merge_clusters(self, cluster1, cluster2):
+        # Check, whether clusters cluster1 and cluster2 exist:
         ok1, ok2 = 0, 0
-        for item in self.towers_list:
-            if item.cluster == cluster1:
+        for signal in self.towers_list:
+            if signal.cluster == cluster1:
                 ok1 = 1
-            elif item.cluster == cluster2:
+            elif signal.cluster == cluster2:
                 ok2 = 1
             if ok1 == 1 and ok2 == 1:
                 break
+        # If no: just skip merging
         else:
             return 0
 
+        # If distance in sectors<1.5 and distance in pads<5.5
+        # for cluster1 and cluster2: merge them
         if (self.get_sector_distance(cluster1, cluster2) < 1.5
            and self.get_pad_distance(cluster1, cluster2) < 5.5):
-            for item in self.towers_list:
-                if item.cluster == cluster2:
-                    item.cluster = cluster1
-                elif item.cluster > cluster2:
-                    item.cluster -= 1
+            # For all signals: if signal in cluster2: Make it cluster1.
+            for signal in self.towers_list:
+                if signal.cluster == cluster2:
+                    signal.cluster = cluster1
+                # Signals with cluster>cluster2: shift to the left (because cluster2 disappears).
+                elif signal.cluster > cluster2:
+                    signal.cluster -= 1
+            # Because clusters are merged, indices have changed:
+            # Start merging loop from the begining (0,1).
             cluster1, cluster2 = 0, 0
 
     def PlotCheck(self, event):
+        '''Plots map of signals in calorimeter towers as 2d histo.'''
+        # Don't draw statistics on 2d map histo
         gStyle.SetOptStat(0)
+        # Name of the histo
         h_key = 'check_event_{}'.format(event.apv_evt)
+        # Local to improve speed (not necessary)
         h_dict = self.h_dict
+        # Try is faster than if!
+        # Fill histo. If does't exist: Create and fill
         try:
             for item in self.towers_list:
                 h_dict[h_key].Fill(item.position[0], item.position[1], item.energy)
@@ -193,18 +243,27 @@ class AnalizeCalorimeterEvent(object):
             for item in self.towers_list:
                 h_dict[h_key].Fill(item.position[0], item.position[1], item.energy)
 
+        # Create Canvas and draw histo
         c1 = TCanvas('c1', h_key, 1800, 1800)
         h_dict[h_key].Draw("COLZTEXT")
 
+        # Print picture to the png image
         c1.Print('./checks/'+h_key+'.png')
+        # Plot statistic again. For others histos
         gStyle.SetOptStat(1)
 
     def PlotClusterCheck(self, event):
+        '''Plots map of clusters as 2d histo'''
+        # Inverse Palette, so 1st most energetic cluster will be the brightest
         TColor().InvertPalette()
+        # Dont draw statistics
         gStyle.SetOptStat(0)
 
+        # Name of the histo
         h_key = 'check_cluster_event_{}'.format(event.apv_evt)
         h_dict = self.h_dict
+        # Try faster than if!
+        # Try Fill, if KeyError: Create and Fill
         try:
             for item in self.towers_list:
                 h_dict[h_key].Fill(item.position[0], item.position[1], item.cluster+1)
@@ -214,14 +273,17 @@ class AnalizeCalorimeterEvent(object):
             for item in self.towers_list:
                 h_dict[h_key].Fill(item.position[0], item.position[1], item.cluster+1)
 
+        # Create canvas and Draw
         c1 = TCanvas('c1', h_key, 1800, 1800)
         h_dict[h_key].Draw("COLZTEXT")
 
+        # Print image and return palette and statistics settings on default values
         c1.Print('./checks/'+h_key+'.png')
         TColor().InvertPalette()
         gStyle.SetOptStat(1)
 
     def FillNclusters(self):
+        '''Fill histo with number of clusters in event'''
         h_key = 'h_n_clusters'
         h_dict = self.h_dict
         try:
@@ -232,6 +294,8 @@ class AnalizeCalorimeterEvent(object):
             h_dict[h_key].Fill(self.get_n_clusters())
 
     def FillClusterEnergy(self, cluster):
+        '''Fill histo with cluster energy in event'''
+        # Check, whether this cluster number exist in this event
         for item in self.towers_list:
             if item.cluster == cluster:
                 break
@@ -248,6 +312,7 @@ class AnalizeCalorimeterEvent(object):
             h_dict[h_key].Fill(self.get_cluster_energy(cluster))
 
     def Fill1PadEnergy(self):
+        '''Fills energy of all clusters with 1 pad size in the event'''
         h_dict = self.h_dict
         get_cluster_n_pads = self.get_cluster_n_pads
         get_cluster_energy = self.get_cluster_energy
@@ -264,6 +329,10 @@ class AnalizeCalorimeterEvent(object):
                     h_dict[h_key].Fill(get_cluster_energy(cluster))
 
     def Fill1PadEnergy_dist_more_4_pads(self):
+        '''
+        Fills all clusters with size of 1 pad
+        if they further than 4.5 pads from most energetic cluster
+        '''
         h_dict = self.h_dict
         get_cluster_n_pads = self.get_cluster_n_pads
         get_cluster_energy = self.get_cluster_energy
@@ -282,6 +351,10 @@ class AnalizeCalorimeterEvent(object):
                     h_dict[h_key].Fill(get_cluster_energy(cluster))
 
     def Fill1PadEnergy_dist_less_4_pads(self):
+        '''
+        Fills all clusters with size of 1 pad
+        if they closer than 4.5 pads from most energetic cluster
+        '''
         h_dict = self.h_dict
         get_cluster_n_pads = self.get_cluster_n_pads
         get_cluster_energy = self.get_cluster_energy
@@ -300,6 +373,7 @@ class AnalizeCalorimeterEvent(object):
                     h_dict[h_key].Fill(get_cluster_energy(cluster))
 
     def FillClusterPadPos(self, cluster):
+        '''Fill histo with pad position of the cluster in event'''
         for item in self.towers_list:
             if item.cluster == cluster:
                 break
@@ -315,6 +389,7 @@ class AnalizeCalorimeterEvent(object):
             h_dict[h_key].Fill(self.get_cluster_pad_pos(cluster))
 
     def FillClusterNPads(self, cluster):
+        '''Fills histo with number of pads of which consists cluster in event.'''
         for item in self.towers_list:
             if item.cluster == cluster:
                 break
@@ -330,6 +405,7 @@ class AnalizeCalorimeterEvent(object):
             h_dict[h_key].Fill(self.get_cluster_n_pads(cluster))
 
     def FillClusterDistance(self, cluster1, cluster2):
+        '''Fill pad distance between cluster1 and cluster2 in event'''
         ok1, ok2 = 0, 0
         for item in self.towers_list:
             if item.cluster == cluster1:
@@ -351,6 +427,7 @@ class AnalizeCalorimeterEvent(object):
             h_dict[h_key].Fill(self.get_pad_distance(cluster1, cluster2))
 
     def FillClusterRatio(self, cluster1, cluster2):
+        '''Fill histo with ratio of cluster energies in event'''
         ok1, ok2 = 0, 0
         for item in self.towers_list:
             if item.cluster == cluster1:
@@ -372,6 +449,7 @@ class AnalizeCalorimeterEvent(object):
             h_dict[h_key].Fill(self.get_energy_ratio(cluster1, cluster2))
 
     def FillClusterInverseRatio(self, cluster1, cluster2):
+        '''Fill ratio of clusters energy, but higher_energy/lower_energy (inversed)'''
         ok1, ok2 = 0, 0
         for item in self.towers_list:
             if item.cluster == cluster1:
@@ -393,6 +471,7 @@ class AnalizeCalorimeterEvent(object):
             h_dict[h_key].Fill(1/self.get_energy_ratio(cluster1, cluster2))
 
     def FillClusterDistVsRatio(self, cluster1, cluster2):
+        '''Fills 2d histogram of energy ratio vs distance for cluster1 vs cluster2 in event'''
         ok1, ok2 = 0, 0
         for item in self.towers_list:
             if item.cluster == cluster1:
@@ -417,7 +496,6 @@ class AnalizeCalorimeterEvent(object):
 
     # Secondary methods
     def position(self, apv_id, apv_channel):
-
         '''
         Input: APV's id and channel
         Output:Tuple (sector, pad, layer): APV position in the detector
@@ -510,59 +588,89 @@ class AnalizeCalorimeterEvent(object):
     # Get functions
 
     def get_n_clusters(self):
+        '''Calculate number of clusters in event'''
+        # List of cluster_indices of data list
         cluster_list = [item.cluster for item in self.towers_list]
+        # If no data points, return 0
         if not cluster_list:
             return 0
+        # Return maximum cluster_index+1
         return max(cluster_list)+1
 
     def get_cluster_energy(self, cluster):
+        '''Calculates cluster energy'''
+        # List of energy of all data points which have attribute cluster == cluster
         energy_list = [item.energy for item in self.towers_list if item.cluster == cluster]
-        # If no cluster returns 0
+        # Return sum of all these energies
         return sum(energy_list)
 
     def get_cluster_pad_pos(self, cluster):
-
+        '''Calculates pad position of the cluster'''
         cluster_pos = 0
+        # Calculate energy of the cluster
         cluster_energy = self.get_cluster_energy(cluster)
+        # Create list of tuples(pad position, energy) for all signals of cluster
         pos_energy_list = [(item.position[1], item.energy) for item in self.towers_list if item.cluster == cluster]
 
+        # Calculate position as sum with weights(energies) for each point
         for pos_energy in pos_energy_list:
             cluster_pos += pos_energy[0]*pos_energy[1]/cluster_energy
         # if no cluster returns 0 pos
         return cluster_pos
 
     def get_cluster_sector_pos(self, cluster):
-
+        '''Calculates sector position of the cluster'''
         cluster_pos = 0
+        # Calculate cluster energy
         cluster_energy = self.get_cluster_energy(cluster)
+        # Create a list of tuples(sector position, energy) of each signal of cluster
         pos_energy_list = [(item.position[0], item.energy) for item in self.towers_list if item.cluster == cluster]
 
+        # Calculate position as sum with weights(energies) over all points
         for pos_energy in pos_energy_list:
             cluster_pos += pos_energy[0]*pos_energy[1]/cluster_energy
         # if no cluster returns 0 pos
         return cluster_pos
 
     def get_cluster_n_pads(self, cluster):
+        '''Calculates number of pads(towers) in cluster'''
+        # Create list of all signals(towers) in cluster
         n_pads_list = [item for item in self.towers_list if item.cluster == cluster]
-        # Returns 0 if no clusters
+
+        # Return length of the list(number of towers).
         return len(n_pads_list)
 
     def get_pad_distance(self, cluster1, cluster2):
+        '''Calculate pad(projected) distance between 2 clusters'''
+
+        # Just for speed performance (not necessary)
         get_cluster_pad_pos = self.get_cluster_pad_pos
+
+        # Calculate position of the clusters and return its difference
         position1 = get_cluster_pad_pos(cluster1)
         position2 = get_cluster_pad_pos(cluster2)
         # This is only projection on pad distance!
         return abs(position1-position2)
 
     def get_sector_distance(self, cluster1, cluster2):
+        '''Calculate sector(projected) distance between 2 clusters'''
+
+        # Just for speed (not necessary)
         get_cluster_sector_pos = self.get_cluster_sector_pos
+
+        # Calculate sector positions and return difference
         position1 = get_cluster_sector_pos(cluster1)
         position2 = get_cluster_sector_pos(cluster2)
         # This is only projection on sector distance!
         return abs(position1-position2)
 
     def get_energy_ratio(self, cluster1, cluster2):
+        '''Calculates ratio of energy between 2 clusters'''
+
+        # Just for performance
         get_cluster_energy = self.get_cluster_energy
+
+        # Calculates enegies of the clusters and return their ratio
         energy1 = get_cluster_energy(cluster1)
         energy2 = get_cluster_energy(cluster2)
         return energy2/energy1
@@ -572,6 +680,7 @@ def tracker_analysis(tracker_layer):
     '''
     Calculates next variables for a tracker layer: Number of hits,
     total energy deposited, positions of hits. Plots histograms.
+    !!!!!ITS BROKEN!!!!!NEED TO REPAIR
     '''
 
     gROOT.SetBatch(1)
@@ -665,6 +774,11 @@ def tracker_analysis(tracker_layer):
 
 
 def energy_fit(tracker_layer):
+    '''
+    Fits energy distribution from ROOT file with Landau-Gaus
+    convolution function.
+    !!!!!ITS BROKEN. REPAIR !!!!!
+    '''
     file = TFile('output.root', 'read')
     # Landau-Gauss fitting:
     fit_function = TF1('fit_function', langaufun, 0.1, 6, 4)
@@ -689,54 +803,76 @@ def energy_fit(tracker_layer):
 
 
 def main():
+    '''Analizing of data. Extraction/Clustering/Filling histos/Writing to file'''
+
+    # Path/Name of input root file
     filename = './trees/run741_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root'
+    # Create object of Class AnalizeCalorimeterEvent
     Analizer = AnalizeCalorimeterEvent(filename)
+
+    # Calcualte number of events to analize from Tree
     n_events = Analizer.tree.GetEntries()
 
+    # Loop ove all events in tree
     for idx, event in enumerate(Analizer.tree):
+        # For debuging. If you need to check 1 event, or loop not over all events
         if idx != 133:
             continue
+
+        # Printout to see how many events are proceded/left.
+        # And how much time spend per event.
         if idx % (500) == 0:
             time_min = (time.time()-start_time) // 60
             time_sec = (time.time()-start_time) % 60
             print('%(idx)i/%(n_events)i events' % locals(), end=' ')
             print('%(time_min)i min' % locals(), end=' ')
             print('%(time_sec)i sec' % locals())
+
+        # Extract data.
         check = Analizer.extract_data(event)
+        # if bad data(energy<0) - skip event
         if check == 0:
             continue
-        Analizer.PlotCheck(event)
 
-        #Analizer.clustering_in_towers(merge='off')
+        # Plot event signals as 2d histo
+        # Analizer.PlotCheck(event)
 
-        #Analizer.PlotClusterCheck(event)
+        # Do clustering to signals in event (without merging)
+        # Analizer.clustering_in_towers(merge='off')
 
+        # Plot event clusters as 2d histo
+        # Analizer.PlotClusterCheck(event)
+
+        # Do clustering to signals with merging
         Analizer.clustering_in_towers(merge='on')
 
+        # Plot event clusters as 2d histo
         Analizer.PlotClusterCheck(event)
 
-    #     Analizer.Fill1PadEnergy()
+        # Fill according histograms. For details open FillHisto() methods
+        Analizer.Fill1PadEnergy()
 
-    #     # Analizer.Fill1PadEnergy_dist_more_4_pads()
-    #     # Analizer.Fill1PadEnergy_dist_less_4_pads()
+        Analizer.FillNclusters()
+        for cluster in range(1, 4):
+            Analizer.FillClusterDistance(0, cluster)
+            Analizer.FillClusterRatio(0, cluster)
+            Analizer.FillClusterDistVsRatio(0, cluster)
 
-    #     Analizer.FillNclusters()
-    #     for cluster in range(1, 4):
-    #         Analizer.FillClusterDistance(0, cluster)
-    #         Analizer.FillClusterRatio(0, cluster)
-    #         Analizer.FillClusterDistVsRatio(0, cluster)
+        for cluster in range(0, 4):
+            Analizer.FillClusterEnergy(cluster)
+            Analizer.FillClusterPadPos(cluster)
+            Analizer.FillClusterNPads(cluster)
 
-    #     for cluster in range(0, 4):
-    #         Analizer.FillClusterEnergy(cluster)
-    #         Analizer.FillClusterPadPos(cluster)
-    #         Analizer.FillClusterNPads(cluster)
+    # Update/create output file, where to write all histograms
+    output_file = TFile('RENAME.root', 'update')
 
-    # output_file = TFile('RENAME.root', 'update')
+    # Write all histograms to the output root file
+    for key in Analizer.h_dict.keys():
+        Analizer.h_dict[key].Write()
 
-    # for key in Analizer.h_dict.keys():
-    #     Analizer.h_dict[key].Write()
-
-    input('Wait')
+    # Print Hooraay text
+    input('Yaay I am finished :3')
 
 
+# I believe It is faster if main code is written inside main().
 main()
