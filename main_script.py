@@ -3,7 +3,7 @@ This script was written to analise data of the LumiCal test beam runs of 2016.
 It's input - root files with signals and apvs' information provided by
 Sasha's Borisov readout system.
 Script has been tested with: root v6.14/06 and python 3.7.2.
-Time needed is ~18 minutes for 50000 events.
+Time needed is ~20 minutes for 55000 events. (AT MY OLD LAPTOP!)
 Script can do the following:
 1)Show 2d map of signals distribution in the event
 2)Do clustering of signals in calorimeter using "linking neighbors" algorithm.
@@ -91,7 +91,7 @@ class AnalizeCalorimeterEvent(object):
 
             # Cuts. Analize: only calorimeter(layer>=2), only 2 central sectors, exclude bad mapping(pad<0)
             if (layer < 2
-               or sector == 0 or sector == 4
+               or sector == 0 or sector == 3
                or (sector == 1 and pad < 20)
                or pad < 0
                 # More cuts. it was ctrl+c ctrl+v from Sasha's code.
@@ -198,7 +198,6 @@ class AnalizeCalorimeterEvent(object):
                     # If clusters were merged start looping from 0,0 again!
                     if merged:
                         cluster1, cluster2 = 0, 0
-                    print(cluster1, cluster2)
                     cluster2 += 1
                 cluster1 += 1
 
@@ -246,7 +245,6 @@ class AnalizeCalorimeterEvent(object):
             for item in self.towers_list:
                 h_dict[h_key].Fill(item.position[0], item.position[1], item.energy)
         except KeyError:
-
             h_dict[h_key] = TH2F(h_key, '', 6, 0, 6, 64, 0, 64)
             h_dict[h_key].SetTitle('event_{};sector;pad'.format(event.apv_evt))
             for item in self.towers_list:
@@ -846,7 +844,7 @@ def main():
         # Do clustering to signals with merging
         Analizer.clustering_in_towers(merge='on')
 
-        # Fill according histograms. For details open FillHisto() methods
+        # Fill according histograms. For details open FillName() methods
         Analizer.Fill1PadEnergy()
 
         Analizer.FillNclusters()
