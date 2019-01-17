@@ -12,7 +12,7 @@ play
 round it.
 '''
 
-from ROOT import TH1F, TH2F, TF1, TGraphErrors, TFile, gROOT, TCanvas, gStyle
+from ROOT import TH1F, TH2F, TF1, TGraphErrors, TFile, gROOT, TCanvas, TColor, gStyle
 import time
 import numpy as np
 
@@ -25,7 +25,7 @@ start_time = time.time()
 # Dont draw pictures in the end
 gROOT.SetBatch(1)
 # Dont draw statistics of histograms
-gStyle.SetOptStat(0)
+# gStyle.SetOptStat(0)
 
 
 class tower():
@@ -110,14 +110,14 @@ class AnalizeCalorimeterEvent(object):
             self.towers_list = towers_list
         return 1
 
-    def clustering_in_towers(self, merging='on'):
+    def clustering_in_towers(self, merge='on'):
         '''
         This method does clustering to the input data - 2d array.
         '''
 
         # Optimization
         towers_list = self.towers_list
-        # merge_clusters = self.merge_clusters
+        merge_clusters = self.merge_clusters
 
         for item in towers_list:
             center_sec, center_pad = item.position
@@ -148,29 +148,39 @@ class AnalizeCalorimeterEvent(object):
 
         self.towers_list = towers_list
 
-        # if merging == 'on':
-        #    for cluster in range(amax(clusters_arr)):
-        #        merge_clusters(cluster, cluster+1)
+        if merge == 'on':
+            cluster1, cluster2 = 0, 0
+            n_clusters = self.get_n_clusters()
+            while cluster1 in range(n_clusters):
+                cluster2 = cluster1+1
+                while cluster2 in range(n_clusters):
+                    merge_clusters(cluster1, cluster2)
+                    cluster2 += 1
+                cluster1 += 1
 
-    #def merge_clusters(self, cluster1, cluster2):
-    #    clusters_arr = self.clusters_arr
+    def merge_clusters(self, cluster1, cluster2):
+        ok1, ok2 = 0, 0
+        for item in self.towers_list:
+            if item.cluster == cluster1:
+                ok1 = 1
+            elif item.cluster == cluster2:
+                ok2 = 1
+            if ok1 == 1 and ok2 == 1:
+                break
+        else:
+            return 0
 
-    #    if not ((clusters_arr == cluster1).any()
-    #       and (clusters_arr == cluster2).any()):
-    #        pass
-    #    elif (self.get_sector_distance(cluster1, cluster2) < 1.5
-    #          and self.get_pad_distance(cluster1, cluster2) < 4.5):
-    #            # Make 0 cluster 1st, and then substarct 1
-    #        clusters_arr[clusters_arr == cluster1] = cluster2
-    #        for sec in range(n_sectors):
-    #            for pad in range(n_pads):
-    #                if clusters_arr[sec, pad] >= cluster2:
-    #                    clusters_arr[sec, pad] -= 1
-    #        self.merge_clusters(cluster1, cluster2)
-    #    else:
-    #        self.merge_clusters(cluster1, cluster2+1)
+        if (self.get_sector_distance(cluster1, cluster2) < 1.5
+           and self.get_pad_distance(cluster1, cluster2) < 5.5):
+            for item in self.towers_list:
+                if item.cluster == cluster2:
+                    item.cluster = cluster1
+                elif item.cluster > cluster2:
+                    item.cluster -= 1
+            cluster1, cluster2 = 0, 0
 
     def PlotCheck(self, event):
+        gStyle.SetOptStat(0)
         h_key = 'check_event_{}'.format(event.apv_evt)
         h_dict = self.h_dict
         try:
@@ -187,6 +197,29 @@ class AnalizeCalorimeterEvent(object):
         h_dict[h_key].Draw("COLZTEXT")
 
         c1.Print('./checks/'+h_key+'.png')
+        gStyle.SetOptStat(1)
+
+    def PlotClusterCheck(self, event):
+        TColor().InvertPalette()
+        gStyle.SetOptStat(0)
+
+        h_key = 'check_cluster_event_{}'.format(event.apv_evt)
+        h_dict = self.h_dict
+        try:
+            for item in self.towers_list:
+                h_dict[h_key].Fill(item.position[0], item.position[1], item.cluster+1)
+        except KeyError:
+            h_dict[h_key] = TH2F(h_key, '', 6, 0, 6, 64, 0, 64)
+            h_dict[h_key].SetTitle('cluster_event_{};sector;pad'.format(event.apv_evt))
+            for item in self.towers_list:
+                h_dict[h_key].Fill(item.position[0], item.position[1], item.cluster+1)
+
+        c1 = TCanvas('c1', h_key, 1800, 1800)
+        h_dict[h_key].Draw("COLZTEXT")
+
+        c1.Print('./checks/'+h_key+'.png')
+        TColor().InvertPalette()
+        gStyle.SetOptStat(1)
 
     def FillNclusters(self):
         h_key = 'h_n_clusters'
@@ -224,10 +257,46 @@ class AnalizeCalorimeterEvent(object):
                 if get_cluster_n_pads(cluster) == 1:
                     h_dict[h_key].Fill(get_cluster_energy(cluster))
         except KeyError:
-            h_dict[h_key] = TH1F(h_key, '', 2000, 0, 100)
+            h_dict[h_key] = TH1F(h_key, '', 2000, 0, 20)
             h_dict[h_key].SetTitle('Energy: 1 pad clusters;Energy [MIP];N events')
             for cluster in range(self.get_n_clusters()):
                 if get_cluster_n_pads(cluster) == 1:
+                    h_dict[h_key].Fill(get_cluster_energy(cluster))
+
+    def Fill1PadEnergy_dist_more_4_pads(self):
+        h_dict = self.h_dict
+        get_cluster_n_pads = self.get_cluster_n_pads
+        get_cluster_energy = self.get_cluster_energy
+        h_key = 'h_energy_1pad_dist_more_4_pads'
+        try:
+            for cluster in range(self.get_n_clusters()):
+                if (get_cluster_n_pads(cluster) == 1
+                   and self.get_pad_distance(1, cluster) > 4.5):
+                    h_dict[h_key].Fill(get_cluster_energy(cluster))
+        except KeyError:
+            h_dict[h_key] = TH1F(h_key, '', 2000, 0, 20)
+            h_dict[h_key].SetTitle('Energy: 1 pad clusters;Energy [MIP];N events')
+            for cluster in range(self.get_n_clusters()):
+                if (get_cluster_n_pads(cluster) == 1
+                   and self.get_pad_distance(1, cluster) > 4.5):
+                    h_dict[h_key].Fill(get_cluster_energy(cluster))
+
+    def Fill1PadEnergy_dist_less_4_pads(self):
+        h_dict = self.h_dict
+        get_cluster_n_pads = self.get_cluster_n_pads
+        get_cluster_energy = self.get_cluster_energy
+        h_key = 'h_energy_1pad_dist_less_4_pads'
+        try:
+            for cluster in range(self.get_n_clusters()):
+                if (get_cluster_n_pads(cluster) == 1
+                   and self.get_pad_distance(1, cluster) < 4.5):
+                    h_dict[h_key].Fill(get_cluster_energy(cluster))
+        except KeyError:
+            h_dict[h_key] = TH1F(h_key, '', 2000, 0, 20)
+            h_dict[h_key].SetTitle('Energy: 1 pad clusters;Energy [MIP];N events')
+            for cluster in range(self.get_n_clusters()):
+                if (get_cluster_n_pads(cluster) == 1
+                   and self.get_pad_distance(1, cluster) < 4.5):
                     h_dict[h_key].Fill(get_cluster_energy(cluster))
 
     def FillClusterPadPos(self, cluster):
@@ -625,41 +694,47 @@ def main():
     n_events = Analizer.tree.GetEntries()
 
     for idx, event in enumerate(Analizer.tree):
-        #if idx == 2000:
-        #    break
-
-        if idx % (300) == 0:
+        if idx != 133:
+            continue
+        if idx % (500) == 0:
             time_min = (time.time()-start_time) // 60
             time_sec = (time.time()-start_time) % 60
             print('%(idx)i/%(n_events)i events' % locals(), end=' ')
             print('%(time_min)i min' % locals(), end=' ')
             print('%(time_sec)i sec' % locals())
-
         check = Analizer.extract_data(event)
         if check == 0:
             continue
+        Analizer.PlotCheck(event)
 
-        # Analizer.PlotCheck(event)
+        #Analizer.clustering_in_towers(merge='off')
 
-        Analizer.clustering_in_towers(merging='off')
+        #Analizer.PlotClusterCheck(event)
 
-        Analizer.Fill1PadEnergy()
+        Analizer.clustering_in_towers(merge='on')
 
-        Analizer.FillNclusters()
-        for cluster in range(1, 4):
-            Analizer.FillClusterDistance(0, cluster)
-            Analizer.FillClusterRatio(0, cluster)
-            Analizer.FillClusterDistVsRatio(0, cluster)
+        Analizer.PlotClusterCheck(event)
 
-        for cluster in range(0, 4):
-            Analizer.FillClusterEnergy(cluster)
-            Analizer.FillClusterPadPos(cluster)
-            Analizer.FillClusterNPads(cluster)
+    #     Analizer.Fill1PadEnergy()
 
-    output_file = TFile('output_new.root', 'update')
+    #     # Analizer.Fill1PadEnergy_dist_more_4_pads()
+    #     # Analizer.Fill1PadEnergy_dist_less_4_pads()
 
-    for key in Analizer.h_dict.keys():
-        Analizer.h_dict[key].Write()
+    #     Analizer.FillNclusters()
+    #     for cluster in range(1, 4):
+    #         Analizer.FillClusterDistance(0, cluster)
+    #         Analizer.FillClusterRatio(0, cluster)
+    #         Analizer.FillClusterDistVsRatio(0, cluster)
+
+    #     for cluster in range(0, 4):
+    #         Analizer.FillClusterEnergy(cluster)
+    #         Analizer.FillClusterPadPos(cluster)
+    #         Analizer.FillClusterNPads(cluster)
+
+    # output_file = TFile('RENAME.root', 'update')
+
+    # for key in Analizer.h_dict.keys():
+    #     Analizer.h_dict[key].Write()
 
     input('Wait')
 
