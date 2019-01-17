@@ -105,9 +105,13 @@ class AnalizeCalorimeterEvent(object):
             # Calculate energy of the event in MIPs
             energy = calib_energy(id_arr[hit], signal_arr[hit])
 
-            # If bad event: skip it
+            # If bad event: skip event
             if energy < 0:
                 return 0
+
+            # if probably noisy signal - skip signal
+            # if energy < 1.4:
+            #     continue
 
             # If signal for this sector,pad(NOT layer!) is in list: add energy
             # Else: Add this signal to list and add energy
@@ -190,7 +194,11 @@ class AnalizeCalorimeterEvent(object):
                 cluster2 = cluster1+1
                 while cluster2 in range(n_clusters):
                     # For this pair: merge clusters()
-                    merge_clusters(cluster1, cluster2)
+                    merged = merge_clusters(cluster1, cluster2)
+                    # If clusters were merged start looping from 0,0 again!
+                    if merged:
+                        cluster1, cluster2 = 0, 0
+                    print(cluster1, cluster2)
                     cluster2 += 1
                 cluster1 += 1
 
@@ -219,9 +227,10 @@ class AnalizeCalorimeterEvent(object):
                 # Signals with cluster>cluster2: shift to the left (because cluster2 disappears).
                 elif signal.cluster > cluster2:
                     signal.cluster -= 1
-            # Because clusters are merged, indices have changed:
-            # Start merging loop from the begining (0,1).
-            cluster1, cluster2 = 0, 0
+            # If were merged: return 1
+            return 1
+        else:
+            return 0
 
     def PlotCheck(self, event):
         '''Plots map of signals in calorimeter towers as 2d histo.'''
@@ -816,8 +825,8 @@ def main():
     # Loop ove all events in tree
     for idx, event in enumerate(Analizer.tree):
         # For debuging. If you need to check 1 event, or loop not over all events
-        if idx != 133:
-            continue
+        # if idx != 133:
+        #    continue
 
         # Printout to see how many events are proceded/left.
         # And how much time spend per event.
@@ -834,20 +843,8 @@ def main():
         if check == 0:
             continue
 
-        # Plot event signals as 2d histo
-        # Analizer.PlotCheck(event)
-
-        # Do clustering to signals in event (without merging)
-        # Analizer.clustering_in_towers(merge='off')
-
-        # Plot event clusters as 2d histo
-        # Analizer.PlotClusterCheck(event)
-
         # Do clustering to signals with merging
         Analizer.clustering_in_towers(merge='on')
-
-        # Plot event clusters as 2d histo
-        Analizer.PlotClusterCheck(event)
 
         # Fill according histograms. For details open FillHisto() methods
         Analizer.Fill1PadEnergy()
