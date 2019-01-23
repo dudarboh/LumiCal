@@ -33,10 +33,6 @@ n_sectors = 4
 # Number of pads of one sector
 n_pads = 64
 
-# Inner radius of detector and length of 1 pad in radial direction
-r_inner = 80  # mm
-r_pad = 1.8  # mm
-
 apv_maps = {}
 
 

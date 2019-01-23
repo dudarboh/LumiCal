@@ -33,12 +33,16 @@ class tower():
     It's position, energy, closest high-energy neighbor,
     cluster number of the signal
     '''
+
     def __init__(self, position, energy):
         self.position = position
         self.energy = energy
-        self.neighbor_position = -1
-        self.neighbor_cluster = -1
+        self.neighbor = -1
         self.cluster = -1
+        # Transform pad/sector numbers into x,y coordinates
+        rho = 80+0.9+1.8*self.position[0]
+        phi = np.pi/2+np.pi/12-np.pi/48-np.pi/24*position[1]
+        self.coordinates = (rho*np.cos(phi), rho*np.sin(phi))
 
 
 class AnalizeCalorimeterEvent(object):
@@ -109,9 +113,8 @@ class AnalizeCalorimeterEvent(object):
             if energy < 0:
                 return 0
 
-            # if probably noisy signal - skip signal
-            # if energy < 1.4:
-            #     continue
+            if energy < 1.4:
+                continue
 
             # If signal for this sector,pad(NOT layer!) is in list: add energy
             # Else: Add this signal to list and add energy
@@ -215,10 +218,13 @@ class AnalizeCalorimeterEvent(object):
         else:
             return 0
 
-        # If distance in sectors<1.5 and distance in pads<5.5
-        # for cluster1 and cluster2: merge them
-        if (self.get_sector_distance(cluster1, cluster2) < 1.5
-           and self.get_pad_distance(cluster1, cluster2) < 5.5):
+        # Calculate distance and energy ration between clusters
+        distance = self.get_pad_distance(cluster1, cluster2)
+        ratio = self.get_energy_ratio(cluster1, cluster2)
+
+        # Define if statement - when to merge clusters
+        if (distance < 5
+           or (distance < 20 and ratio < 0.1-0.1/20*distance)):
             # For all signals: if signal in cluster2: Make it cluster1.
             for signal in self.towers_list:
                 if signal.cluster == cluster2:
@@ -245,7 +251,7 @@ class AnalizeCalorimeterEvent(object):
             for item in self.towers_list:
                 h_dict[h_key].Fill(item.position[0], item.position[1], item.energy)
         except KeyError:
-            h_dict[h_key] = TH2F(h_key, '', 6, 0, 6, 64, 0, 64)
+            h_dict[h_key] = TH2F(h_key, '', n_sectors+2, 0, n_sectors+2, n_pads, 0, n_pads)
             h_dict[h_key].SetTitle('event_{};sector;pad'.format(event.apv_evt))
             for item in self.towers_list:
                 h_dict[h_key].Fill(item.position[0], item.position[1], item.energy)
@@ -275,7 +281,7 @@ class AnalizeCalorimeterEvent(object):
             for item in self.towers_list:
                 h_dict[h_key].Fill(item.position[0], item.position[1], item.cluster+1)
         except KeyError:
-            h_dict[h_key] = TH2F(h_key, '', 6, 0, 6, 64, 0, 64)
+            h_dict[h_key] = TH2F(h_key, '', n_sectors+2, 0, n_sectors+2, n_pads, 0, n_pads)
             h_dict[h_key].SetTitle('cluster_event_{};sector;pad'.format(event.apv_evt))
             for item in self.towers_list:
                 h_dict[h_key].Fill(item.position[0], item.position[1], item.cluster+1)
@@ -391,7 +397,7 @@ class AnalizeCalorimeterEvent(object):
         try:
             h_dict[h_key].Fill(self.get_cluster_pad_pos(cluster))
         except KeyError:
-            h_dict[h_key] = TH1F(h_key, '', 200, 0, 64)
+            h_dict[h_key] = TH1F(h_key, '', 200, 0, n_pads)
             h_dict[h_key].SetTitle('Position: {} cluster;pos [pad];N events'.format(cluster+1))
             h_dict[h_key].Fill(self.get_cluster_pad_pos(cluster))
 
@@ -411,7 +417,7 @@ class AnalizeCalorimeterEvent(object):
             h_dict[h_key].SetTitle('N pads: {} cluster;N pads;N events'.format(cluster+1))
             h_dict[h_key].Fill(self.get_cluster_n_pads(cluster))
 
-    def FillClusterDistance(self, cluster1, cluster2):
+    def FillClusterPadDistance(self, cluster1, cluster2):
         '''Fill pad distance between cluster1 and cluster2 in event'''
         ok1, ok2 = 0, 0
         for item in self.towers_list:
@@ -424,14 +430,36 @@ class AnalizeCalorimeterEvent(object):
         else:
             return 0
         h_dict = self.h_dict
-        h_key = 'h_distance_{}_vs_{}'.format(cluster1+1, cluster2+1)
+        h_key = 'h_pad_distance_{}_vs_{}'.format(cluster1+1, cluster2+1)
         try:
             h_dict[h_key].Fill(self.get_pad_distance(cluster1, cluster2))
         except KeyError:
             h_dict[h_key] = TH1F(h_key, '', 400, 0, 60)
-            self.h_dict[h_key].SetTitle('Distance between: {} and {} clusters;N pads;\
+            self.h_dict[h_key].SetTitle('Pad distance between: {} and {} clusters;N pads;\
                                             N events'.format(cluster1+1, cluster2+1))
             h_dict[h_key].Fill(self.get_pad_distance(cluster1, cluster2))
+
+    def FillClusterCoordDistance(self, cluster1, cluster2):
+        '''Fill pad distance between cluster1 and cluster2 in event'''
+        ok1, ok2 = 0, 0
+        for item in self.towers_list:
+            if item.cluster == cluster1:
+                ok1 = 1
+            elif item.cluster == cluster2:
+                ok2 = 1
+            if ok1 == 1 and ok2 == 1:
+                break
+        else:
+            return 0
+        h_dict = self.h_dict
+        h_key = 'h_coord_distance_{}_vs_{}'.format(cluster1+1, cluster2+1)
+        try:
+            h_dict[h_key].Fill(self.get_coord_distance(cluster1, cluster2))
+        except KeyError:
+            h_dict[h_key] = TH1F(h_key, '', 400, 0, 60)
+            self.h_dict[h_key].SetTitle('Distance between: {} and {} clusters; d, [mm];\
+                                            N events'.format(cluster1+1, cluster2+1))
+            h_dict[h_key].Fill(self.get_coord_distance(cluster1, cluster2))
 
     def FillClusterRatio(self, cluster1, cluster2):
         '''Fill histo with ratio of cluster energies in event'''
@@ -639,6 +667,26 @@ class AnalizeCalorimeterEvent(object):
         # if no cluster returns 0 pos
         return cluster_pos
 
+    def get_cluster_coord(self, cluster):
+        '''Calculates x,y position of the cluster'''
+        cluster_x = 0
+        cluster_y = 0
+        # Calculate energy of the cluster
+        cluster_energy = self.get_cluster_energy(cluster)
+        # Create list of tuples(pad position, energy) for all signals of cluster
+        x_energy_list = [(item.coordinates[0], item.energy) for item in self.towers_list if item.cluster == cluster]
+
+        y_energy_list = [(item.coordinates[1], item.energy) for item in self.towers_list if item.cluster == cluster]
+
+        # Calculate position as sum with weights(energies) for each point
+        for x in x_energy_list:
+            cluster_x += x[0]*x[1]/cluster_energy
+        for y in y_energy_list:
+            cluster_y += y[0]*y[1]/cluster_energy
+
+        # if no cluster returns 0 coordinates
+        return cluster_x, cluster_y
+
     def get_cluster_n_pads(self, cluster):
         '''Calculates number of pads(towers) in cluster'''
         # Create list of all signals(towers) in cluster
@@ -671,6 +719,15 @@ class AnalizeCalorimeterEvent(object):
         # This is only projection on sector distance!
         return abs(position1-position2)
 
+    def get_coord_distance(self, cluster1, cluster2):
+        '''Calculate x,y distance between 2 clusters'''
+
+        # Calculate sector positions and return difference
+        x1, y1 = self.get_cluster_coord(cluster1)
+        x2, y2 = self.get_cluster_coord(cluster2)
+        # This is only projection on sector distance!
+        return np.sqrt((x1-x2)**2+(y1-y2)**2)
+
     def get_energy_ratio(self, cluster1, cluster2):
         '''Calculates ratio of energy between 2 clusters'''
 
@@ -683,104 +740,7 @@ class AnalizeCalorimeterEvent(object):
         return energy2/energy1
 
 
-def tracker_analysis(tracker_layer):
-    '''
-    Calculates next variables for a tracker layer: Number of hits,
-    total energy deposited, positions of hits. Plots histograms.
-    !!!!!ITS BROKEN!!!!!NEED TO REPAIR
-    '''
-
-    gROOT.SetBatch(1)
-    # gStyle.SetOptStat(0)
-
-    input_filename = 'run741_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root'
-    input_file = TFile.Open(input_filename)
-
-    h_energy_calib = TH1F('h_energy_calib', '', 100, 0, 10.)
-    h_energy_calib.SetTitle('Total energy per event;Energy, [MIP];N events')
-
-    h_position = TH1F('h_position', '', 64, 0-0.5, 64-0.5)
-    h_position.SetTitle('Position per hit;Pad number;N events')
-
-    h_n_hits = TH1F('h_hits_number', '', 5, 0-0.5, 5-0.5)
-    h_n_hits.SetTitle('N Hits per event;N hits;N events')
-
-    for idx, event in enumerate(input_file.apv_reco):
-        # Use to debug to pass not all 50k points
-        if idx == 200:
-            break
-
-        n_events = input_file.apv_reco.GetEntries()
-        if idx == 0:
-            print('Evaluating', n_events, 'Events:')
-
-        if idx % (n_events*2//100) == 0:
-            print(tracker_layer, 'Tracker:', end=' ')
-            print(100*idx//n_events, '% are done', end=' ')
-            print('Time used:', (time.time()-start_time)//60, 'min', end=' ')
-            print(int((time.time()-start_time)) % 60, 'sec')
-
-        n_hits = 0
-        energy = 0.
-
-        id_arr = event.apv_id
-        channel_arr = event.apv_ch
-        signal_arr = event.apv_signal_maxfit
-
-        for j in range(len(id_arr)):
-
-            sector, pad, layer = position(id_arr[j], channel_arr[j])
-
-            # ###Start of cut section###
-            # Cut on APV maping
-            if pad < 0:
-                continue
-            # Geometry cuts
-            if not (sector == 1 or sector == 2):
-                continue
-            # Cut on APV noisy area
-            if sector == 1 and pad < 20:
-                continue
-
-            # Analyse only defined trackers
-            if layer != tracker_layer:
-                continue
-
-            # More cuts. it was ctrl+c ctrl+v from Sasha's code.
-            cond_1 = event.apv_fit_tau[j] > 1. and event.apv_fit_tau[j] < 3.
-            cond_2 = signal_arr[j] < 2000.
-            cond_31 = layer < 2 and signal_arr[j] > 0.
-            cond_32 = event.apv_nn_output[j] > 0.5
-            cond_41 = layer >= 2 and signal_arr[j] > 0.75
-            cond_42 = event.apv_nn_output[j] > 0.5
-            cond_51 = event.apv_fit_t0[j] > (event.apv_bint1[j]-2.7)
-            cond_52 = event.apv_fit_t0[j] < (event.apv_bint1[j]-0.5)
-
-            if not (cond_1 and cond_2
-               and ((cond_31 and cond_32) or (cond_41 and cond_42))
-               and cond_51 and cond_52):
-                continue
-
-            # ###End of cut section###
-
-            n_hits += 1
-            energy += calib_energy(id_arr[j], signal_arr[j])
-
-            h_position.Fill(pad)
-
-        h_energy_calib.Fill(energy)
-        h_n_hits.Fill(n_hits)
-
-    output_file = TFile('output.root', 'update')
-
-    h_energy_calib.Write('energy_tracker_'+str(tracker_layer))
-    h_position.Write('position_tracker_'+str(tracker_layer))
-    h_n_hits.Write('hits_tracker_'+str(tracker_layer))
-
-    output_file.Close()
-
-
-def energy_fit(tracker_layer):
+def langaus_fit(h_name):
     '''
     Fits energy distribution from ROOT file with Landau-Gaus
     convolution function.
@@ -797,8 +757,8 @@ def energy_fit(tracker_layer):
 
     print('It tries to fit. Please be pation and make yourself a tea :3')
 
-    histo = file.Get('energy_tracker_'+str(tracker_layer))
-    histo.SetTitle('Total Energy per event: Tracker '+str(tracker_layer))
+    histo = file.Get(h_name)
+    histo.SetTitle(h_name)
 
     histo.Fit('fit_function', "R")  # fit within specified range
     histo.Draw()
@@ -822,9 +782,9 @@ def main():
 
     # Loop ove all events in tree
     for idx, event in enumerate(Analizer.tree):
-        # For debuging. If you need to check 1 event, or loop not over all events
-        # if idx != 133:
-        #    continue
+        # For debuging. If you need to loop not over all events
+        # if idx == 1000:
+        #     break
 
         # Printout to see how many events are proceded/left.
         # And how much time spend per event.
@@ -845,11 +805,9 @@ def main():
         Analizer.clustering_in_towers(merge='on')
 
         # Fill according histograms. For details open FillName() methods
-        Analizer.Fill1PadEnergy()
-
         Analizer.FillNclusters()
         for cluster in range(1, 4):
-            Analizer.FillClusterDistance(0, cluster)
+            Analizer.FillClusterCoordDistance(0, cluster)
             Analizer.FillClusterRatio(0, cluster)
             Analizer.FillClusterDistVsRatio(0, cluster)
 
