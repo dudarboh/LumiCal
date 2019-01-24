@@ -34,15 +34,18 @@ class tower():
     cluster number of the signal
     '''
 
-    def __init__(self, position, energy):
-        self.position = position
+    def __init__(self, sector, pad, energy):
+        # (sector, pad)
+        self.sector = sector
+        self.pad = pad
         self.energy = energy
         self.neighbor = -1
         self.cluster = -1
         # Transform pad/sector numbers into x,y coordinates
-        rho = 80+0.9+1.8*self.position[0]
-        phi = np.pi/2+np.pi/12-np.pi/48-np.pi/24*position[1]
-        self.coordinates = (rho*np.cos(phi), rho*np.sin(phi))
+        rho = 80+0.9+1.8*pad
+        phi = np.pi/2+np.pi/12-np.pi/48-np.pi/24*sector
+        self.x = rho*np.cos(phi)
+        self.y = rho*np.sin(phi)
 
 
 class AnalizeCalorimeterEvent(object):
@@ -68,11 +71,17 @@ class AnalizeCalorimeterEvent(object):
         # Create dictionary to store all histograms
         self.h_dict = {}
 
-    # Primary methods
-    def extract_data(self, event):
+        # For trackers analysis
+        self.n_1cluster_events = 0
+        self.cluster_coincidence_tracker1 = 0
+        self.cluster_coincidence_tracker2 = 0
+        self.cluster_coincidence_both = 0
+        self.cluster_weird_tracker1 = 0
+        self.cluster_weird_tracker2 = 0
+        self.cluster_weird_both = 0
 
-        # List for signals data
-        self.towers_list = []
+    # Primary methods
+    def extract_data(self, event, option='calorimeter'):
 
         # Read all branches from the input ROOT file.
         id_arr = event.apv_id
@@ -86,15 +95,34 @@ class AnalizeCalorimeterEvent(object):
         # Make local variables to improve speed
         position = self.position
         calib_energy = self.calib_energy
-        towers_list = self.towers_list
+
+        # Lists for data in selected region
+        if option == 'calorimeter':
+            self.calorimeter_data = []
+            data_list = self.calorimeter_data
+        elif option == 'tracker1':
+            self.tracker1_data = []
+            data_list = self.tracker1_data
+        elif option == 'tracker2':
+            self.tracker2_data = []
+            data_list = self.tracker2_data
+        else:
+            return 0
 
         # Loop through all signals(hits) in the event
         for hit in range(len(id_arr)):
             # Calculate sector, pad and layer(position) of the signal
             sector, pad, layer = position(id_arr[hit], channel_arr[hit])
 
-            # Cuts. Analize: only calorimeter(layer>=2), only 2 central sectors, exclude bad mapping(pad<0)
-            if (layer < 2
+            if option == 'calorimeter':
+                cut1 = layer < 2
+            elif option == 'tracker1':
+                cut1 = layer != 0
+            elif option == 'tracker2':
+                cut1 = layer != 1
+
+            # Cuts. Analize: only selected in option region, only 2 central sectors, exclude bad mapping(pad<0)
+            if (cut1
                or sector == 0 or sector == 3
                or (sector == 1 and pad < 20)
                or pad < 0
@@ -113,20 +141,26 @@ class AnalizeCalorimeterEvent(object):
             if energy < 0:
                 return 0
 
-            if energy < 1.4:
+            # Ignore noisy cells in calorimeter
+            if energy < 1.4 and option == 'calorimeter':
                 continue
 
-            # If signal for this sector,pad(NOT layer!) is in list: add energy
+            # If signal for this sector,pad(ANY layer!) is in list: add energy
             # Else: Add this signal to list and add energy
-            for item in towers_list:
-                if item.position == (sector, pad):
+            for item in data_list:
+                if (item.sector, item.pad) == (sector, pad):
                     item.energy += energy
                     break
             else:
-                towers_list.append(tower((sector, pad), energy))
+                data_list.append(tower(sector, pad, energy))
 
-            # Write everything in global variable
-            self.towers_list = towers_list
+        # Write everything in global variable
+        if option == 'calorimeter':
+            self.calorimeter_data = data_list
+        elif option == 'tracker1':
+            self.tracker1_data = data_list
+        elif option == 'tracker2':
+            self.tracker2_data = data_list
 
         # Return 1 if everything alright
         return 1
@@ -134,22 +168,22 @@ class AnalizeCalorimeterEvent(object):
     def clustering_in_towers(self, merge='on'):
 
         # Make local variables to inprove speed.
-        towers_list = self.towers_list
+        data_list = self.calorimeter_data
         merge_clusters = self.merge_clusters
 
         # for sll signals1 in the list:
-        for signal in towers_list:
+        for signal in data_list:
             # define position of this signal
-            center_sec, center_pad = signal.position
+            center_sec, center_pad = signal.sector, signal.pad
             # create empty list for its neighbors
             neighbors = []
 
             # for all signals2 in the list
-            for signal_neighbor in towers_list:
+            for signal_neighbor in data_list:
                 # If signal2 is neighbor to signal1 (or signal2 == signal1) add it to neighbors list.
                 # Signal2 can be signal1! If it is the most energetic among its neighbors
-                if (signal_neighbor.position[0] in range(center_sec-1, center_sec+2)
-                   and signal_neighbor.position[1] in range(center_pad-1, center_pad+2)):
+                if (signal_neighbor.sector in range(center_sec-1, center_sec+2)
+                   and signal_neighbor.pad in range(center_pad-1, center_pad+2)):
                     neighbors.append(signal_neighbor)
 
             # Sort neighbors
@@ -159,14 +193,14 @@ class AnalizeCalorimeterEvent(object):
             signal.neighbor = neighbors_sorted[0]
 
         # Sort all signals by energy
-        towers_list = sorted(towers_list, key=lambda x: x.energy, reverse=True)
+        data_list = sorted(data_list, key=lambda x: x.energy, reverse=True)
 
         cluster_idx = 0
         # For signal1 in data list
-        for signal in towers_list:
+        for signal in data_list:
             # If the neighbor of signal1 is signal1. (Means it local maximum)
             # Mark it as seed (give it cluster_index = 0, 1, 2, ...)
-            if signal.neighbor.position == signal.position:
+            if (signal.neighbor.sector, signal.neighbor.pad) == (signal.sector, signal.pad):
                 signal.cluster = cluster_idx
                 cluster_idx += 1
 
@@ -176,7 +210,7 @@ class AnalizeCalorimeterEvent(object):
         while n_non_clusters != 0:
             n_non_clusters = 0
             # for signal in data list
-            for signal in towers_list:
+            for signal in data_list:
                 # If signal is not in a cluster: +1 to non_cluster counter
                 # If the highest energetic neighbor of signal is in cluster
                 # Add this signal to the same cluster
@@ -186,7 +220,7 @@ class AnalizeCalorimeterEvent(object):
                         signal.cluster = signal.neighbor.cluster
 
         # Write updated data to the global variable
-        self.towers_list = towers_list
+        self.calorimeter_data = data_list
 
         # If merge clusters option is on:
         if merge == 'on':
@@ -204,18 +238,56 @@ class AnalizeCalorimeterEvent(object):
                     cluster2 += 1
                 cluster1 += 1
 
+    def trackers_analysis(self):
+        '''
+        Rough tracker analysis. Checks whether signal in trackers
+        correspond to signal in calorimeter.
+        Do it after clustering_in_towers() method!!!
+        '''
+        # Do analysis only with 1cluster events
+        if self.get_n_clusters() != 1:
+            return 0
+
+        # Rewrite this ugly motherfucker. I ll do it later
+        match1 = 0
+        match2 = 0
+        non_match1 = 0
+        non_match2 = 0
+
+        self.n_1cluster_events += 1
+        for signal in self.tracker1_data:
+            if (signal.pad-1 < self.get_cluster_pad_pos(0) < signal.pad+1
+               and signal.sector-0.5 < self.get_cluster_sector_pos(0) < signal.sector+0.5):
+                match1 = 1
+            else:
+                non_match1 = 1
+
+        for signal in self.tracker2_data:
+            if (signal.pad-1 < self.get_cluster_pad_pos(0) < signal.pad+1
+               and signal.sector-0.5 < self.get_cluster_sector_pos(0) < signal.sector+0.5):
+                match2 = 1
+            else:
+                non_match2 = 1
+
+        if match1 == 1 and match2 == 0:
+            self.cluster_coincidence_tracker1 += 1
+        elif match1 == 0 and match2 == 1:
+            self.cluster_coincidence_tracker2 += 1
+        elif match1 == 1 and match2 == 1:
+            self.cluster_coincidence_both += 1
+
+        if non_match1 == 1 and non_match2 == 0:
+            self.cluster_weird_tracker1 += 1
+        elif non_match1 == 0 and non_match2 == 1:
+            self.cluster_weird_tracker2 += 1
+        elif non_match1 == 1 and non_match2 == 1:
+            self.cluster_weird_both += 1
+
+    # Secondary methods
     def merge_clusters(self, cluster1, cluster2):
-        # Check, whether clusters cluster1 and cluster2 exist:
-        ok1, ok2 = 0, 0
-        for signal in self.towers_list:
-            if signal.cluster == cluster1:
-                ok1 = 1
-            elif signal.cluster == cluster2:
-                ok2 = 1
-            if ok1 == 1 and ok2 == 1:
-                break
-        # If no: just skip merging
-        else:
+        # Check, whether clusters cluster1 and cluster2 exist, if not return 0:
+        if not (any(signal.cluster == cluster1 for signal in self.calorimeter_data)
+           and any(signal.cluster == cluster2 for signal in self.calorimeter_data)):
             return 0
 
         # Calculate distance and energy ration between clusters
@@ -226,7 +298,7 @@ class AnalizeCalorimeterEvent(object):
         if (distance < 5
            or (distance < 20 and ratio < 0.1-0.1/20*distance)):
             # For all signals: if signal in cluster2: Make it cluster1.
-            for signal in self.towers_list:
+            for signal in self.calorimeter_data:
                 if signal.cluster == cluster2:
                     signal.cluster = cluster1
                 # Signals with cluster>cluster2: shift to the left (because cluster2 disappears).
@@ -237,299 +309,6 @@ class AnalizeCalorimeterEvent(object):
         else:
             return 0
 
-    def PlotCheck(self, event):
-        '''Plots map of signals in calorimeter towers as 2d histo.'''
-        # Don't draw statistics on 2d map histo
-        gStyle.SetOptStat(0)
-        # Name of the histo
-        h_key = 'check_event_{}'.format(event.apv_evt)
-        # Local to improve speed (not necessary)
-        h_dict = self.h_dict
-        # Try is faster than if!
-        # Fill histo. If does't exist: Create and fill
-        try:
-            for item in self.towers_list:
-                h_dict[h_key].Fill(item.position[0], item.position[1], item.energy)
-        except KeyError:
-            h_dict[h_key] = TH2F(h_key, '', n_sectors+2, 0, n_sectors+2, n_pads, 0, n_pads)
-            h_dict[h_key].SetTitle('event_{};sector;pad'.format(event.apv_evt))
-            for item in self.towers_list:
-                h_dict[h_key].Fill(item.position[0], item.position[1], item.energy)
-
-        # Create Canvas and draw histo
-        c1 = TCanvas('c1', h_key, 1800, 1800)
-        h_dict[h_key].Draw("COLZTEXT")
-
-        # Print picture to the png image
-        c1.Print('./checks/'+h_key+'.png')
-        # Plot statistic again. For others histos
-        gStyle.SetOptStat(1)
-
-    def PlotClusterCheck(self, event):
-        '''Plots map of clusters as 2d histo'''
-        # Inverse Palette, so 1st most energetic cluster will be the brightest
-        TColor().InvertPalette()
-        # Dont draw statistics
-        gStyle.SetOptStat(0)
-
-        # Name of the histo
-        h_key = 'check_cluster_event_{}'.format(event.apv_evt)
-        h_dict = self.h_dict
-        # Try faster than if!
-        # Try Fill, if KeyError: Create and Fill
-        try:
-            for item in self.towers_list:
-                h_dict[h_key].Fill(item.position[0], item.position[1], item.cluster+1)
-        except KeyError:
-            h_dict[h_key] = TH2F(h_key, '', n_sectors+2, 0, n_sectors+2, n_pads, 0, n_pads)
-            h_dict[h_key].SetTitle('cluster_event_{};sector;pad'.format(event.apv_evt))
-            for item in self.towers_list:
-                h_dict[h_key].Fill(item.position[0], item.position[1], item.cluster+1)
-
-        # Create canvas and Draw
-        c1 = TCanvas('c1', h_key, 1800, 1800)
-        h_dict[h_key].Draw("COLZTEXT")
-
-        # Print image and return palette and statistics settings on default values
-        c1.Print('./checks/'+h_key+'.png')
-        TColor().InvertPalette()
-        gStyle.SetOptStat(1)
-
-    def FillNclusters(self):
-        '''Fill histo with number of clusters in event'''
-        h_key = 'h_n_clusters'
-        h_dict = self.h_dict
-        try:
-            h_dict[h_key].Fill(self.get_n_clusters())
-        except KeyError:
-            h_dict[h_key] = TH1F(h_key, '', 15, 0, 15)
-            h_dict[h_key].SetTitle('N clusters;N Clusters;N Events')
-            h_dict[h_key].Fill(self.get_n_clusters())
-
-    def FillClusterEnergy(self, cluster):
-        '''Fill histo with cluster energy in event'''
-        # Check, whether this cluster number exist in this event
-        for item in self.towers_list:
-            if item.cluster == cluster:
-                break
-        else:
-            return 0
-
-        h_dict = self.h_dict
-        h_key = 'h_energy_{}'.format(cluster+1)
-        try:
-            h_dict[h_key].Fill(self.get_cluster_energy(cluster))
-        except KeyError:
-            h_dict[h_key] = TH1F(h_key, '', 2000, 0, 500)
-            h_dict[h_key].SetTitle('Energy: {} clust;Energy [MIP];N events'.format(cluster+1))
-            h_dict[h_key].Fill(self.get_cluster_energy(cluster))
-
-    def Fill1PadEnergy(self):
-        '''Fills energy of all clusters with 1 pad size in the event'''
-        h_dict = self.h_dict
-        get_cluster_n_pads = self.get_cluster_n_pads
-        get_cluster_energy = self.get_cluster_energy
-        h_key = 'h_energy_1pad'
-        try:
-            for cluster in range(self.get_n_clusters()):
-                if get_cluster_n_pads(cluster) == 1:
-                    h_dict[h_key].Fill(get_cluster_energy(cluster))
-        except KeyError:
-            h_dict[h_key] = TH1F(h_key, '', 2000, 0, 20)
-            h_dict[h_key].SetTitle('Energy: 1 pad clusters;Energy [MIP];N events')
-            for cluster in range(self.get_n_clusters()):
-                if get_cluster_n_pads(cluster) == 1:
-                    h_dict[h_key].Fill(get_cluster_energy(cluster))
-
-    def Fill1PadEnergy_dist_more_4_pads(self):
-        '''
-        Fills all clusters with size of 1 pad
-        if they further than 4.5 pads from most energetic cluster
-        '''
-        h_dict = self.h_dict
-        get_cluster_n_pads = self.get_cluster_n_pads
-        get_cluster_energy = self.get_cluster_energy
-        h_key = 'h_energy_1pad_dist_more_4_pads'
-        try:
-            for cluster in range(self.get_n_clusters()):
-                if (get_cluster_n_pads(cluster) == 1
-                   and self.get_pad_distance(1, cluster) > 4.5):
-                    h_dict[h_key].Fill(get_cluster_energy(cluster))
-        except KeyError:
-            h_dict[h_key] = TH1F(h_key, '', 2000, 0, 20)
-            h_dict[h_key].SetTitle('Energy: 1 pad clusters;Energy [MIP];N events')
-            for cluster in range(self.get_n_clusters()):
-                if (get_cluster_n_pads(cluster) == 1
-                   and self.get_pad_distance(1, cluster) > 4.5):
-                    h_dict[h_key].Fill(get_cluster_energy(cluster))
-
-    def Fill1PadEnergy_dist_less_4_pads(self):
-        '''
-        Fills all clusters with size of 1 pad
-        if they closer than 4.5 pads from most energetic cluster
-        '''
-        h_dict = self.h_dict
-        get_cluster_n_pads = self.get_cluster_n_pads
-        get_cluster_energy = self.get_cluster_energy
-        h_key = 'h_energy_1pad_dist_less_4_pads'
-        try:
-            for cluster in range(self.get_n_clusters()):
-                if (get_cluster_n_pads(cluster) == 1
-                   and self.get_pad_distance(1, cluster) < 4.5):
-                    h_dict[h_key].Fill(get_cluster_energy(cluster))
-        except KeyError:
-            h_dict[h_key] = TH1F(h_key, '', 2000, 0, 20)
-            h_dict[h_key].SetTitle('Energy: 1 pad clusters;Energy [MIP];N events')
-            for cluster in range(self.get_n_clusters()):
-                if (get_cluster_n_pads(cluster) == 1
-                   and self.get_pad_distance(1, cluster) < 4.5):
-                    h_dict[h_key].Fill(get_cluster_energy(cluster))
-
-    def FillClusterPadPos(self, cluster):
-        '''Fill histo with pad position of the cluster in event'''
-        for item in self.towers_list:
-            if item.cluster == cluster:
-                break
-        else:
-            return 0
-        h_dict = self.h_dict
-        h_key = 'h_position_{}'.format(cluster+1)
-        try:
-            h_dict[h_key].Fill(self.get_cluster_pad_pos(cluster))
-        except KeyError:
-            h_dict[h_key] = TH1F(h_key, '', 200, 0, n_pads)
-            h_dict[h_key].SetTitle('Position: {} cluster;pos [pad];N events'.format(cluster+1))
-            h_dict[h_key].Fill(self.get_cluster_pad_pos(cluster))
-
-    def FillClusterNPads(self, cluster):
-        '''Fills histo with number of pads of which consists cluster in event.'''
-        for item in self.towers_list:
-            if item.cluster == cluster:
-                break
-        else:
-            return 0
-        h_dict = self.h_dict
-        h_key = 'h_npads_{}'.format(cluster+1)
-        try:
-            h_dict[h_key].Fill(self.get_cluster_n_pads(cluster))
-        except KeyError:
-            h_dict[h_key] = TH1F(h_key, '', 25, 0, 25)
-            h_dict[h_key].SetTitle('N pads: {} cluster;N pads;N events'.format(cluster+1))
-            h_dict[h_key].Fill(self.get_cluster_n_pads(cluster))
-
-    def FillClusterPadDistance(self, cluster1, cluster2):
-        '''Fill pad distance between cluster1 and cluster2 in event'''
-        ok1, ok2 = 0, 0
-        for item in self.towers_list:
-            if item.cluster == cluster1:
-                ok1 = 1
-            elif item.cluster == cluster2:
-                ok2 = 1
-            if ok1 == 1 and ok2 == 1:
-                break
-        else:
-            return 0
-        h_dict = self.h_dict
-        h_key = 'h_pad_distance_{}_vs_{}'.format(cluster1+1, cluster2+1)
-        try:
-            h_dict[h_key].Fill(self.get_pad_distance(cluster1, cluster2))
-        except KeyError:
-            h_dict[h_key] = TH1F(h_key, '', 400, 0, 60)
-            self.h_dict[h_key].SetTitle('Pad distance between: {} and {} clusters;N pads;\
-                                            N events'.format(cluster1+1, cluster2+1))
-            h_dict[h_key].Fill(self.get_pad_distance(cluster1, cluster2))
-
-    def FillClusterCoordDistance(self, cluster1, cluster2):
-        '''Fill pad distance between cluster1 and cluster2 in event'''
-        ok1, ok2 = 0, 0
-        for item in self.towers_list:
-            if item.cluster == cluster1:
-                ok1 = 1
-            elif item.cluster == cluster2:
-                ok2 = 1
-            if ok1 == 1 and ok2 == 1:
-                break
-        else:
-            return 0
-        h_dict = self.h_dict
-        h_key = 'h_coord_distance_{}_vs_{}'.format(cluster1+1, cluster2+1)
-        try:
-            h_dict[h_key].Fill(self.get_coord_distance(cluster1, cluster2))
-        except KeyError:
-            h_dict[h_key] = TH1F(h_key, '', 400, 0, 60)
-            self.h_dict[h_key].SetTitle('Distance between: {} and {} clusters; d, [mm];\
-                                            N events'.format(cluster1+1, cluster2+1))
-            h_dict[h_key].Fill(self.get_coord_distance(cluster1, cluster2))
-
-    def FillClusterRatio(self, cluster1, cluster2):
-        '''Fill histo with ratio of cluster energies in event'''
-        ok1, ok2 = 0, 0
-        for item in self.towers_list:
-            if item.cluster == cluster1:
-                ok1 = 1
-            elif item.cluster == cluster2:
-                ok2 = 1
-            if ok1 == 1 and ok2 == 1:
-                break
-        else:
-            return 0
-        h_dict = self.h_dict
-        h_key = 'h_ratio_{}_over_{}'.format(cluster2+1, cluster1+1)
-        try:
-            h_dict[h_key].Fill(self.get_energy_ratio(cluster1, cluster2))
-        except KeyError:
-            h_dict[h_key] = TH1F(h_key, '', 400, 0, 1)
-            h_dict[h_key].SetTitle('Energy ratio: {} over {} clusters;Ratio;\
-                                    N events'.format(cluster2+1, cluster1+1))
-            h_dict[h_key].Fill(self.get_energy_ratio(cluster1, cluster2))
-
-    def FillClusterInverseRatio(self, cluster1, cluster2):
-        '''Fill ratio of clusters energy, but higher_energy/lower_energy (inversed)'''
-        ok1, ok2 = 0, 0
-        for item in self.towers_list:
-            if item.cluster == cluster1:
-                ok1 = 1
-            elif item.cluster == cluster2:
-                ok2 = 1
-            if ok1 == 1 and ok2 == 1:
-                break
-        else:
-            return 0
-        h_dict = self.h_dict
-        h_key = 'h__inverse_ratio_{}_over_{}'.format(cluster2+1, cluster1+1)
-        try:
-            h_dict[h_key].Fill(1/self.get_energy_ratio(cluster1, cluster2))
-        except KeyError:
-            h_dict[h_key] = TH1F(h_key, '', 400, 0, 200)
-            h_dict[h_key].SetTitle('Inverse Energy ratio: {} over {} clusters;Ratio;\
-                                    N events'.format(cluster2+1, cluster1+1))
-            h_dict[h_key].Fill(1/self.get_energy_ratio(cluster1, cluster2))
-
-    def FillClusterDistVsRatio(self, cluster1, cluster2):
-        '''Fills 2d histogram of energy ratio vs distance for cluster1 vs cluster2 in event'''
-        ok1, ok2 = 0, 0
-        for item in self.towers_list:
-            if item.cluster == cluster1:
-                ok1 = 1
-            elif item.cluster == cluster2:
-                ok2 = 1
-            if ok1 == 1 and ok2 == 1:
-                break
-        else:
-            return 0
-        h_dict = self.h_dict
-        h_key = 'h_dist_ratio_for_{}_and_{}'.format(cluster1+1, cluster2+1)
-        try:
-            h_dict[h_key].Fill(self.get_pad_distance(cluster1, cluster2),
-                               self.get_energy_ratio(cluster1, cluster2))
-        except KeyError:
-            h_dict[h_key] = TH2F(h_key, '', 400, 0, 60, 400, 0, 1)
-            h_dict[h_key].SetTitle('Distance vs ratio: {} and {} clusters;Distance;\
-                                    Ratio;N Events'.format(cluster1+1, cluster2+1))
-            h_dict[h_key].Fill(self.get_pad_distance(cluster1, cluster2),
-                               self.get_energy_ratio(cluster1, cluster2))
-
-    # Secondary methods
     def position(self, apv_id, apv_channel):
         '''
         Input: APV's id and channel
@@ -591,6 +370,8 @@ class AnalizeCalorimeterEvent(object):
                     continue
 
                 # Calibration x-y data is inverted
+                # Normalization D/MC according to L2 *1.09# /4.3 divide when No CD
+                # *16.5*1.164 - is needed in order to get energy in MIPs.
                 x.append(float(line.split('  ')[1]))
                 y.append(float(line.split('  ')[0])*16.5*1.164)
                 x_err.append(float(line.split('  ')[3]))
@@ -603,15 +384,6 @@ class AnalizeCalorimeterEvent(object):
 
         graph = TGraphErrors(len(x), x, y, x_err, y_err)
 
-        # Copypasted from Sasha's code. Scale calibration graphs
-        # Normalization D/MC according to L2 *1.09# /4.3 divide when No CD
-        # for point in range(graph.GetN()):
-            # Scale Y to get MIPS
-        #    graph.GetY()[point] *= 16.5*1.164
-
-            # y_err zero anyway
-        #    graph.GetEY()[point] *= 16.5*1.164
-
         # Take into account threshold
         if apv_signal > signal_treshold:
             signal = signal_treshold
@@ -620,22 +392,305 @@ class AnalizeCalorimeterEvent(object):
 
         return graph.Eval(signal)
 
-    # Get functions
+    # Check event methods
+    def PlotCheck(self, event, option='calorimeter'):
+        '''Plots map of signals in calorimeter towers as 2d histo.'''
+        # Don't draw statistics on 2d map histo
+        if option == 'calorimeter':
+            data_list = self.calorimeter_data
+        elif option == 'tracker1':
+            data_list = self.tracker1_data
+        elif option == 'tracker2':
+            data_list = self.tracker2_data
+        else:
+            return 0
 
+        gStyle.SetOptStat(0)
+        # Name of the histo
+        h_key = 'check_event_{}'.format(event.apv_evt)
+        # Local to improve speed (not necessary)
+        h_dict = self.h_dict
+        # Try is faster than if!
+        # Fill histo. If does't exist: Create and fill
+        try:
+            for signal in data_list:
+                h_dict[h_key].Fill(signal.sector, signal.pad, signal.energy)
+        except KeyError:
+            h_dict[h_key] = TH2F(h_key, '', n_sectors+2, 0, n_sectors+2, n_pads, 0, n_pads)
+            h_dict[h_key].SetTitle('event_{};sector;pad'.format(event.apv_evt))
+            for signal in data_list:
+                h_dict[h_key].Fill(signal.sector, signal.pad, signal.energy)
+
+        # Create Canvas and draw histo
+        c1 = TCanvas('c1', h_key, 1800, 1800)
+        h_dict[h_key].Draw("COLZTEXT")
+
+        # Print picture to the png image
+        c1.Print('./checks/'+h_key+'.png')
+        # Plot statistic again. For others histos
+        gStyle.SetOptStat(1)
+
+    def PlotClusterCheck(self, event):
+        '''Plots map of clusters as 2d histo'''
+        # Inverse Palette, so 1st most energetic cluster will be the brightest
+        TColor().InvertPalette()
+        # Dont draw statistics
+        gStyle.SetOptStat(0)
+
+        # Name of the histo
+        h_key = 'check_cluster_event_{}'.format(event.apv_evt)
+        h_dict = self.h_dict
+        # Try faster than if!
+        # Try Fill, if KeyError: Create and Fill
+        try:
+            for signal in self.calorimeter_data:
+                h_dict[h_key].Fill(signal.sector, signal.pad, signal.cluster+1)
+        except KeyError:
+            h_dict[h_key] = TH2F(h_key, '', n_sectors+2, 0, n_sectors+2, n_pads, 0, n_pads)
+            h_dict[h_key].SetTitle('cluster_event_{};sector;pad'.format(event.apv_evt))
+            for signal in self.calorimeter_data:
+                h_dict[h_key].Fill(signal.sector, signal.pad, signal.cluster+1)
+
+        # Create canvas and Draw
+        c1 = TCanvas('c1', h_key, 1800, 1800)
+        h_dict[h_key].Draw("COLZTEXT")
+
+        # Print image and return palette and statistics settings on default values
+        c1.Print('./checks/'+h_key+'.png')
+        TColor().InvertPalette()
+        gStyle.SetOptStat(1)
+
+    # Fill methods
+    def FillNclusters(self):
+        '''Fill histo with number of clusters in event'''
+        h_key = 'h_n_clusters'
+        h_dict = self.h_dict
+        try:
+            h_dict[h_key].Fill(self.get_n_clusters())
+        except KeyError:
+            h_dict[h_key] = TH1F(h_key, '', 15, 0, 15)
+            h_dict[h_key].SetTitle('N clusters;N Clusters;N Events')
+            h_dict[h_key].Fill(self.get_n_clusters())
+
+    def FillClusterEnergy(self, cluster):
+        '''Fill histo with cluster energy in event'''
+        # Check, whether this cluster number exist in this event
+        if not any(signal.cluster == cluster for signal in self.calorimeter_data):
+            return 0
+
+        h_dict = self.h_dict
+        h_key = 'h_cluster_energy_{}'.format(cluster+1)
+        try:
+            h_dict[h_key].Fill(self.get_cluster_energy(cluster))
+        except KeyError:
+            h_dict[h_key] = TH1F(h_key, '', 2000, 0, 500)
+            h_dict[h_key].SetTitle('Energy: {} clust;Energy [MIP];N events'.format(cluster+1))
+            h_dict[h_key].Fill(self.get_cluster_energy(cluster))
+
+    def Fill1PadEnergy(self):
+        '''Fills energy of all clusters with 1 pad size in the event'''
+        h_dict = self.h_dict
+        get_cluster_n_pads = self.get_cluster_n_pads
+        get_cluster_energy = self.get_cluster_energy
+        h_key = 'h_energy_1pad_clusters'
+        try:
+            for cluster in range(self.get_n_clusters()):
+                if get_cluster_n_pads(cluster) == 1:
+                    h_dict[h_key].Fill(get_cluster_energy(cluster))
+        except KeyError:
+            h_dict[h_key] = TH1F(h_key, '', 2000, 0, 20)
+            h_dict[h_key].SetTitle('Energy: 1 pad clusters;Energy [MIP];N events')
+            for cluster in range(self.get_n_clusters()):
+                if get_cluster_n_pads(cluster) == 1:
+                    h_dict[h_key].Fill(get_cluster_energy(cluster))
+
+    def Fill1PadEnergy_dist_more_4_pads(self):
+        '''
+        Fills all clusters with size of 1 pad
+        if they further than 4.5 pads from most energetic cluster
+        '''
+        h_dict = self.h_dict
+        get_cluster_n_pads = self.get_cluster_n_pads
+        get_cluster_energy = self.get_cluster_energy
+        h_key = 'h_energy_1pad_dist_more_4_pads'
+        try:
+            for cluster in range(self.get_n_clusters()):
+                if (get_cluster_n_pads(cluster) == 1
+                   and self.get_pad_distance(1, cluster) > 4.5):
+                    h_dict[h_key].Fill(get_cluster_energy(cluster))
+        except KeyError:
+            h_dict[h_key] = TH1F(h_key, '', 2000, 0, 20)
+            h_dict[h_key].SetTitle('Energy: 1 pad clusters;Energy [MIP];N events')
+            for cluster in range(self.get_n_clusters()):
+                if (get_cluster_n_pads(cluster) == 1
+                   and self.get_pad_distance(1, cluster) > 4.5):
+                    h_dict[h_key].Fill(get_cluster_energy(cluster))
+
+    def Fill1PadEnergy_dist_less_4_pads(self):
+        '''
+        Fills all clusters with size of 1 pad
+        if they closer than 4.5 pads from most energetic cluster
+        '''
+        h_dict = self.h_dict
+        get_cluster_n_pads = self.get_cluster_n_pads
+        get_cluster_energy = self.get_cluster_energy
+        h_key = 'h_energy_1pad_dist_less_4_pads'
+        try:
+            for cluster in range(self.get_n_clusters()):
+                if (get_cluster_n_pads(cluster) == 1
+                   and self.get_pad_distance(1, cluster) < 4.5):
+                    h_dict[h_key].Fill(get_cluster_energy(cluster))
+        except KeyError:
+            h_dict[h_key] = TH1F(h_key, '', 2000, 0, 20)
+            h_dict[h_key].SetTitle('Energy: 1 pad clusters;Energy [MIP];N events')
+            for cluster in range(self.get_n_clusters()):
+                if (get_cluster_n_pads(cluster) == 1
+                   and self.get_pad_distance(1, cluster) < 4.5):
+                    h_dict[h_key].Fill(get_cluster_energy(cluster))
+
+    def FillClusterPadPos(self, cluster):
+        '''Fill histo with pad position of the cluster in event'''
+        if not any(signal.cluster == cluster for signal in self.calorimeter_data):
+            return 0
+
+        h_dict = self.h_dict
+        h_key = 'h_cluster_pad_pos_{}'.format(cluster+1)
+        try:
+            h_dict[h_key].Fill(self.get_cluster_pad_pos(cluster))
+        except KeyError:
+            h_dict[h_key] = TH1F(h_key, '', 200, 0, n_pads)
+            h_dict[h_key].SetTitle('Position: {} cluster;pos [pad];N events'.format(cluster+1))
+            h_dict[h_key].Fill(self.get_cluster_pad_pos(cluster))
+
+    def FillClusterNPads(self, cluster):
+        '''Fills histo with number of pads of which consists cluster in event.'''
+        if not any(signal.cluster == cluster for signal in self.calorimeter_data):
+            return 0
+        h_dict = self.h_dict
+        h_key = 'h_cluster_npads_{}'.format(cluster+1)
+        try:
+            h_dict[h_key].Fill(self.get_cluster_n_pads(cluster))
+        except KeyError:
+            h_dict[h_key] = TH1F(h_key, '', 25, 0, 25)
+            h_dict[h_key].SetTitle('N pads: {} cluster;N pads;N events'.format(cluster+1))
+            h_dict[h_key].Fill(self.get_cluster_n_pads(cluster))
+
+    def FillClusterPadDistance(self, cluster1, cluster2):
+        '''Fill pad distance between cluster1 and cluster2 in event'''
+        if not (any(signal.cluster == cluster1 for signal in self.calorimeter_data)
+           and any(signal.cluster == cluster2 for signal in self.calorimeter_data)):
+            return 0
+        h_dict = self.h_dict
+        h_key = 'h_cluster_pad_distance_{}_vs_{}'.format(cluster1+1, cluster2+1)
+        try:
+            h_dict[h_key].Fill(self.get_pad_distance(cluster1, cluster2))
+        except KeyError:
+            h_dict[h_key] = TH1F(h_key, '', 400, 0, 60)
+            self.h_dict[h_key].SetTitle('Pad distance between: {} and {} clusters;N pads;\
+                                            N events'.format(cluster1+1, cluster2+1))
+            h_dict[h_key].Fill(self.get_pad_distance(cluster1, cluster2))
+
+    def FillClusterCoordDistance(self, cluster1, cluster2):
+        '''Fill pad distance between cluster1 and cluster2 in event'''
+        if not (any(signal.cluster == cluster1 for signal in self.calorimeter_data)
+           and any(signal.cluster == cluster2 for signal in self.calorimeter_data)):
+            return 0
+        h_dict = self.h_dict
+        h_key = 'h_cluster_coord_distance_{}_vs_{}'.format(cluster1+1, cluster2+1)
+        try:
+            h_dict[h_key].Fill(self.get_coord_distance(cluster1, cluster2))
+        except KeyError:
+            h_dict[h_key] = TH1F(h_key, '', 400, 0, 60)
+            self.h_dict[h_key].SetTitle('Distance between: {} and {} clusters; d, [mm];\
+                                            N events'.format(cluster1+1, cluster2+1))
+            h_dict[h_key].Fill(self.get_coord_distance(cluster1, cluster2))
+
+    def FillClusterRatio(self, cluster1, cluster2):
+        '''Fill histo with ratio of cluster energies in event'''
+        if not (any(signal.cluster == cluster1 for signal in self.calorimeter_data)
+           and any(signal.cluster == cluster2 for signal in self.calorimeter_data)):
+            return 0
+        h_dict = self.h_dict
+        h_key = 'h_cluster_ratio_{}_over_{}'.format(cluster2+1, cluster1+1)
+        try:
+            h_dict[h_key].Fill(self.get_energy_ratio(cluster1, cluster2))
+        except KeyError:
+            h_dict[h_key] = TH1F(h_key, '', 400, 0, 1)
+            h_dict[h_key].SetTitle('Energy ratio: {} over {} clusters;Ratio;\
+                                    N events'.format(cluster2+1, cluster1+1))
+            h_dict[h_key].Fill(self.get_energy_ratio(cluster1, cluster2))
+
+    def FillClusterInverseRatio(self, cluster1, cluster2):
+        '''Fill ratio of clusters energy, but higher_energy/lower_energy (inversed)'''
+        if not (any(signal.cluster == cluster1 for signal in self.calorimeter_data)
+           and any(signal.cluster == cluster2 for signal in self.calorimeter_data)):
+            return 0
+        h_dict = self.h_dict
+        h_key = 'h_cluster_inverse_ratio_{}_over_{}'.format(cluster2+1, cluster1+1)
+        try:
+            h_dict[h_key].Fill(1/self.get_energy_ratio(cluster1, cluster2))
+        except KeyError:
+            h_dict[h_key] = TH1F(h_key, '', 400, 0, 200)
+            h_dict[h_key].SetTitle('Inverse Energy ratio: {} over {} clusters;Ratio;\
+                                    N events'.format(cluster2+1, cluster1+1))
+            h_dict[h_key].Fill(1/self.get_energy_ratio(cluster1, cluster2))
+
+    def FillClusterDistVsRatio(self, cluster1, cluster2):
+        '''Fills 2d histogram of energy ratio vs distance for cluster1 vs cluster2 in event'''
+        if not (any(signal.cluster == cluster1 for signal in self.calorimeter_data)
+           and any(signal.cluster == cluster2 for signal in self.calorimeter_data)):
+            return 0
+        h_dict = self.h_dict
+        h_key = 'h_cluster_dist_ratio_for_{}_and_{}'.format(cluster1+1, cluster2+1)
+        try:
+            h_dict[h_key].Fill(self.get_pad_distance(cluster1, cluster2),
+                               self.get_energy_ratio(cluster1, cluster2))
+        except KeyError:
+            h_dict[h_key] = TH2F(h_key, '', 400, 0, 60, 400, 0, 1)
+            h_dict[h_key].SetTitle('Distance vs ratio: {} and {} clusters;Distance;\
+                                    Ratio;N Events'.format(cluster1+1, cluster2+1))
+            h_dict[h_key].Fill(self.get_pad_distance(cluster1, cluster2),
+                               self.get_energy_ratio(cluster1, cluster2))
+
+    # Fill methods for trackers
+    def FillTracker1Energy(self):
+        '''Fill histo with energy in tracker1'''
+        h_dict = self.h_dict
+        h_key = 'h_tracker1_energy'
+        try:
+            h_dict[h_key].Fill(self.get_tracker1_energy())
+        except KeyError:
+            h_dict[h_key] = TH1F(h_key, '', 500, 0, 50)
+            h_dict[h_key].SetTitle('Tracker1 Energy;Energy [MIP];N events')
+            h_dict[h_key].Fill(self.get_tracker1_energy())
+
+    def FillTracker2Energy(self):
+        '''Fill histo with energy in tracker2'''
+        h_dict = self.h_dict
+        h_key = 'h_tracker2_energy'
+        try:
+            h_dict[h_key].Fill(self.get_tracker2_energy())
+        except KeyError:
+            h_dict[h_key] = TH1F(h_key, '', 500, 0, 50)
+            h_dict[h_key].SetTitle('Tracker2 Energy;Energy [MIP];N events')
+            h_dict[h_key].Fill(self.get_tracker2_energy())
+
+    # Get functions
     def get_n_clusters(self):
         '''Calculate number of clusters in event'''
         # List of cluster_indices of data list
-        cluster_list = [item.cluster for item in self.towers_list]
+        cluster_list = [signal.cluster for signal in self.calorimeter_data]
         # If no data points, return 0
         if not cluster_list:
             return 0
         # Return maximum cluster_index+1
         return max(cluster_list)+1
 
+    # Get cluster properties
     def get_cluster_energy(self, cluster):
         '''Calculates cluster energy'''
         # List of energy of all data points which have attribute cluster == cluster
-        energy_list = [item.energy for item in self.towers_list if item.cluster == cluster]
+        energy_list = [signal.energy for signal in self.calorimeter_data if signal.cluster == cluster]
         # Return sum of all these energies
         return sum(energy_list)
 
@@ -645,7 +700,7 @@ class AnalizeCalorimeterEvent(object):
         # Calculate energy of the cluster
         cluster_energy = self.get_cluster_energy(cluster)
         # Create list of tuples(pad position, energy) for all signals of cluster
-        pos_energy_list = [(item.position[1], item.energy) for item in self.towers_list if item.cluster == cluster]
+        pos_energy_list = [(signal.pad, signal.energy) for signal in self.calorimeter_data if signal.cluster == cluster]
 
         # Calculate position as sum with weights(energies) for each point
         for pos_energy in pos_energy_list:
@@ -659,7 +714,7 @@ class AnalizeCalorimeterEvent(object):
         # Calculate cluster energy
         cluster_energy = self.get_cluster_energy(cluster)
         # Create a list of tuples(sector position, energy) of each signal of cluster
-        pos_energy_list = [(item.position[0], item.energy) for item in self.towers_list if item.cluster == cluster]
+        pos_energy_list = [(signal.sector, signal.energy) for signal in self.calorimeter_data if signal.cluster == cluster]
 
         # Calculate position as sum with weights(energies) over all points
         for pos_energy in pos_energy_list:
@@ -674,15 +729,15 @@ class AnalizeCalorimeterEvent(object):
         # Calculate energy of the cluster
         cluster_energy = self.get_cluster_energy(cluster)
         # Create list of tuples(pad position, energy) for all signals of cluster
-        x_energy_list = [(item.coordinates[0], item.energy) for item in self.towers_list if item.cluster == cluster]
+        x_energy_list = [(signal.x, signal.energy) for signal in self.calorimeter_data if signal.cluster == cluster]
 
-        y_energy_list = [(item.coordinates[1], item.energy) for item in self.towers_list if item.cluster == cluster]
+        y_energy_list = [(signal.y, signal.energy) for signal in self.calorimeter_data if signal.cluster == cluster]
 
         # Calculate position as sum with weights(energies) for each point
-        for x in x_energy_list:
-            cluster_x += x[0]*x[1]/cluster_energy
-        for y in y_energy_list:
-            cluster_y += y[0]*y[1]/cluster_energy
+        for x_energy in x_energy_list:
+            cluster_x += x_energy[0]*x_energy[1]/cluster_energy
+        for y_energy in y_energy_list:
+            cluster_y += y_energy[0]*y_energy[1]/cluster_energy
 
         # if no cluster returns 0 coordinates
         return cluster_x, cluster_y
@@ -690,11 +745,12 @@ class AnalizeCalorimeterEvent(object):
     def get_cluster_n_pads(self, cluster):
         '''Calculates number of pads(towers) in cluster'''
         # Create list of all signals(towers) in cluster
-        n_pads_list = [item for item in self.towers_list if item.cluster == cluster]
+        n_pads_list = [signal for signal in self.calorimeter_data if signal.cluster == cluster]
 
         # Return length of the list(number of towers).
         return len(n_pads_list)
 
+    # Get distances
     def get_pad_distance(self, cluster1, cluster2):
         '''Calculate pad(projected) distance between 2 clusters'''
 
@@ -728,6 +784,7 @@ class AnalizeCalorimeterEvent(object):
         # This is only projection on sector distance!
         return np.sqrt((x1-x2)**2+(y1-y2)**2)
 
+    # Get energy ratio
     def get_energy_ratio(self, cluster1, cluster2):
         '''Calculates ratio of energy between 2 clusters'''
 
@@ -738,6 +795,21 @@ class AnalizeCalorimeterEvent(object):
         energy1 = get_cluster_energy(cluster1)
         energy2 = get_cluster_energy(cluster2)
         return energy2/energy1
+
+    # Get functions for trackers
+    def get_tracker1_energy(self):
+        '''Calculates all energy in track1'''
+        # List of energy of all data points
+        energy_list = [signal.energy for signal in self.tracker1_data]
+        # Return sum of all these energies
+        return sum(energy_list)
+
+    def get_tracker2_energy(self):
+        '''Calculates all energy in track1'''
+        # List of energy of all data points
+        energy_list = [signal.energy for signal in self.tracker2_data]
+        # Return sum of all these energies
+        return sum(energy_list)
 
 
 def langaus_fit(h_name):
@@ -796,22 +868,30 @@ def main():
             print('%(time_sec)i sec' % locals())
 
         # Extract data.
-        check = Analizer.extract_data(event)
+        check = Analizer.extract_data(event, option='calorimeter')
         # if bad data(energy<0) - skip event
         if check == 0:
             continue
+        Analizer.extract_data(event, option='tracker1')
+        Analizer.extract_data(event, option='tracker2')
 
         # Do clustering to signals with merging
         Analizer.clustering_in_towers(merge='on')
 
+        # Check trackers hits
+        Analizer.trackers_analysis()
+
         # Fill according histograms. For details open FillName() methods
         Analizer.FillNclusters()
-        for cluster in range(1, 4):
+        Analizer.FillTracker1Energy()
+        Analizer.FillTracker2Energy()
+        for cluster in range(1, 3):
             Analizer.FillClusterCoordDistance(0, cluster)
+            Analizer.FillClusterPadDistance(0, cluster)
             Analizer.FillClusterRatio(0, cluster)
             Analizer.FillClusterDistVsRatio(0, cluster)
 
-        for cluster in range(0, 4):
+        for cluster in range(0, 3):
             Analizer.FillClusterEnergy(cluster)
             Analizer.FillClusterPadPos(cluster)
             Analizer.FillClusterNPads(cluster)
@@ -822,6 +902,14 @@ def main():
     # Write all histograms to the output root file
     for key in Analizer.h_dict.keys():
         Analizer.h_dict[key].Write()
+
+    print(Analizer.n_1cluster_events*100/n_events, '% events are with 1 cluster only')
+    print(Analizer.cluster_coincidence_tracker1*100/Analizer.n_1cluster_events, "% events match cluster only in 1st tracker")
+    print(Analizer.cluster_coincidence_tracker2*100/Analizer.n_1cluster_events, "% events match cluster only in 2nd tracker")
+    print(Analizer.cluster_coincidence_both*100/Analizer.n_1cluster_events, "% events match cluster in both trackers")
+    print(Analizer.cluster_weird_tracker1*100/Analizer.n_1cluster_events, "% events have non cluster signal(s) only in 1st tracker")
+    print(Analizer.cluster_weird_tracker2*100/Analizer.n_1cluster_events, "% events have non cluster signal(s) only in 2nd tracker")
+    print(Analizer.cluster_weird_both*100/Analizer.n_1cluster_events, "% events have non cluster signal(s) in both trackers")
 
     # Print Hooraay text
     input('Yaay I am finished :3')
