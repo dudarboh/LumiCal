@@ -29,16 +29,24 @@ gROOT.SetBatch(1)
 
 class Signal:
     '''
-    Class to store information about signals in the event.
-    It's position, energy, closest high-energy neighbor,
-    cluster number of the signal
+    Signal in the detector
+    Attributes:
+    sector, pad, layer - position of the signal
+    energy - energy of the signal
+    neighbor - the most energetic neighbor of the signal or itself.
+    x, y - coordinates of signal in x, y.
+    cluster - cluster index to which the signal was asigned
+
+    position() - method to calculate position of the signal
+    based on apv's id and channel where signal was recorded
+    calib_energy - method to calculate calibrated energy of the
+    signal.It uses: calibration files for this apv, recorded signal
+    value of ADC (Voltage) in apv.
     '''
 
     def __init__(self, apv_id, apv_channel, apv_signal):
-        # (sector, pad)
-        self.sector = self.position(apv_id, apv_channel)[0]
-        self.pad = self.position(apv_id, apv_channel)[1]
-        self.layer = self.position(apv_id, apv_channel)[2]
+        # Calculate all parameters of the signal when object created
+        self.sector, self.pad, self.layer = self.position(apv_id, apv_channel)
         self.energy = self.calib_energy(apv_id, apv_signal)
 
         self.neighbor = -1
@@ -134,6 +142,21 @@ class Signal:
 
 
 class Cluster:
+    '''
+    Collected cluster in calorimeter
+    Attributes:
+    pad, sector - position of the cluster (TOWERS were used for clustering)
+    x, y - same, but in Cartesian coorinates
+    energy - total energy of all cells in cluster
+    n_pads - number of towers which create a cluster
+
+    get_energy() - calculates cluster energy based on signal's data
+    get_position() - calculates cluster position based on signal's data
+    get_n_pads() - calculates number of pads in cluster based on signal's data
+    merge() - update properties of cluster "self" if it was merged with cluster2.
+    Sum energy and number of pads. Calculate new weighted average position.
+    Do nothing with cluster2. Should be deleted in the code!
+    '''
     def __init__(self, data, cluster):
         self.energy = self.get_energy(data, cluster)
 
@@ -169,16 +192,11 @@ class Cluster:
 
 class EventData:
     '''
-    This class does calorimeter analysis:
-    1) Extracts hits from imput root file (method extract_data)
-    2.1) Gives every hit corresponding cluster number (method clustering_in_towers())
-    2.2.) Merge some slucsters if some user's conditions are satisfied
-    3) PlotCheck(), PlotClusterCheck() - plot 2d map of signals of 1 event.
-    4) Fillxxx() - Fills histograms with corresponding values
-    5) getxxx() - Compute corresponding value for the event
-    6) position(), calib_energy() - calculate position and energy of the signal
-    based on the input root file.
-    7) merge_clusters() - merges all clusters.
+    Main analysis class
+
+    Attributes:
+    __init__() - when created opens root file to read apv's data.
+    Creates histograms to write future results
     '''
     def __init__(self, filename):
         # Create root file and open "filename" file
@@ -191,6 +209,11 @@ class EventData:
         self.create_histos()
 
     def create_histos(self):
+        '''
+        Creates histograms needed for the analysis and writes them in dictionary
+        with corresponded keys. Feel free to comment unnecessary histograms to
+        not create mess in the output file root.
+        '''
         self.h_dict = {}
         # Number of clusters
         h_key = 'h_n_clusters'
@@ -281,6 +304,11 @@ class EventData:
         #         self.h_dict[h_key] = TH2F(h_key, '', 400, 0, 60, 400, 0, 1)
 
     def fill_histos(self):
+        '''
+        Fills all histograms (if created) with calculated
+        variables or properties.
+        '''
+
         # Number of clusters
         h_key = 'h_n_clusters'
         if h_key in self.h_dict:
@@ -381,8 +409,10 @@ class EventData:
                 distance = abs(signal.pad-cluster1_pad)
                 self.h_dict[h_key].Fill(signal.pad)
 
-    # Extract data
     def extract_data(self, event):
+        '''
+        Extracts signals of event.THE MOST TIME CONSUMING FUNCTION :(
+        '''
 
         # Read needed branches from the input ROOT file.
         id_arr = event.apv_id
@@ -393,15 +423,15 @@ class EventData:
         apv_fit_t0 = event.apv_fit_t0
         apv_bint1 = event.apv_bint1
 
-        # Lists for data in selected region
+        # Lists for signals
         self.calorimeter_data = []
         self.tracker1_data = []
         self.tracker2_data = []
 
         # Loop through all signals(hits) in the event
         for hit in range(len(id_arr)):
-            # Calculate sector, pad and layer(position) of the signal
-
+            # Create signal object. It appears with it's position and energy
+            # already calculated
             signal = Signal(id_arr[hit], channel_arr[hit], signal_arr[hit])
 
             # Cuts: only 2 central sectors, exclude bad mapping(pad<0), etc
@@ -416,12 +446,11 @@ class EventData:
                or apv_fit_t0[hit] > (apv_bint1[hit]-0.5)):
                 continue
 
-            # Calculate energy of the event in MIPs
-
             # Ignore noisy cells in calorimeter
             if signal.energy < 1.4 and signal.layer > 1:
                 continue
 
+            # Choose what is data_list(tracker1/2,calorimeter)
             if signal.layer == 0:
                 data_list = self.tracker1_data
             elif signal.layer == 1:
@@ -429,7 +458,7 @@ class EventData:
             else:
                 data_list = self.calorimeter_data
 
-            # If signal for this sector,pad(ANY layer!) is in list: add energy
+            # If signal with this position already in the list: just add energy
             # Else: Add this signal to list and add energy
             for item in data_list:
                 if (item.sector, item.pad) == (signal.sector, signal.pad):
@@ -438,61 +467,84 @@ class EventData:
             else:
                 data_list.append(signal)
 
+        # If no signals in calorimeter - skip event
         if len(self.calorimeter_data) == 0:
             return 0
+
+        # If everything is ok
         return 1
 
-    # Clustering
     def clustering_in_towers(self, merge='on'):
+        '''
+        Group signals into clusters changing their 'cluster' attribute.
+        '''
 
+        # Create list for cluster objects
         self.cluster_list = []
+
+        # Find for every signal the most energetic neighbor
+        # And write it as attribute 'neighbor'
         self.set_neighbors(self.calorimeter_data)
+
+        # Collect signals into clusters, using linking-local-neighbor
+        # algorithm.
         self.set_clusters(self.calorimeter_data)
 
-        # Create list of clusters
+        # Calculate number of primary clusters
         n_clusters = max([signal.cluster for signal in self.calorimeter_data])+1
+        # Add cluster objects to the list.
         for cluster in range(n_clusters):
             self.cluster_list.append(Cluster(self.calorimeter_data, cluster))
 
-        # If merge clusters option is on:
+        # If merge clusters option is on: merge clusters
         if merge == 'on':
             self.merge_clusters(self.calorimeter_data, self.cluster_list)
 
+        # Analize only events with 1 cluster.
         if len(self.cluster_list) != 1:
             return 0
+        # If everything is ok
         return 1
 
     def set_neighbors(self, data_list):
-        # for all signals1 in the list:
+        '''
+        Finds the most energetic neighbor among neighbors
+        '''
+
+        # Loop through all signals for which we are finding the neighbor:
         for signal in data_list:
             # define position of this signal
             center_sec, center_pad = signal.sector, signal.pad
-            # create empty list for its neighbors
+            # create empty list for it's neighbors
             neighbors = []
 
-            # for all signals2 in the list
+            # loop over all neighbor signal-candidate
             for signal_neighbor in data_list:
-                # If signal2 is neighbor to signal1 (or signal2 == signal1) add it to neighbors list.
-                # Neighbor can be signal1 itself! If it is the most energetic among its neighbors
+                # If signal-candidate is in neighborhood to signal add it to neighbors list.
+                # Neighbor can be signal itself! If it is the most energetic among it's neighbors
                 if (signal_neighbor.sector in range(center_sec-1, center_sec+2)
                    and signal_neighbor.pad in range(center_pad-1, center_pad+2)):
                     neighbors.append(signal_neighbor)
 
-            # Sort neighbors
+            # Sort neighbors by energy
             neighbors_sorted = sorted(neighbors, key=lambda x: x.energy, reverse=True)
 
-            # Pass the highest energetic neighbor to signal1 attribute "neighbor"
+            # Pass the highest energetic neighbor to signal attribute "neighbor"
             signal.neighbor = neighbors_sorted[0]
 
     def set_clusters(self, data_list):
+        '''
+        Linking local neighbor algorithm.
+        '''
+
         # Sort all signals by energy
         data_list = sorted(data_list, key=lambda x: x.energy, reverse=True)
 
         cluster_idx = 0
-        # For signal1 in data list
+        # For signal in data list
         for signal in data_list:
-            # If the neighbor of signal1 is signal1. (Means it local maximum)
-            # Mark it as seed (give it cluster_index = 0, 1, 2, ...)
+            # If the neighbor of signal1 is signal1 itself. (This means it is a local maximum)
+            # Mark it as a seed (give it cluster_index = 0, 1, 2, ...)
             if (signal.neighbor.sector, signal.neighbor.pad) == (signal.sector, signal.pad):
                 signal.cluster = cluster_idx
                 cluster_idx += 1
@@ -513,29 +565,46 @@ class EventData:
                         signal.cluster = signal.neighbor.cluster
 
     def merge_clusters(self, data_list, cluster_list):
+        '''
+        Merge clusters if they fulfill 'if' statement condition
+        '''
+
+        # restart 'for' loops if clusters merged
         restart = True
+        # while clusters merge
         while restart:
+            # for cluster1 and cluster2: one line nested double loop
             for cluster1, cluster2 in ((cl1, cl2) for cl1 in cluster_list for cl2 in cluster_list):
+                # If it is the same cluster - skip
                 if cluster1 == cluster2:
                     continue
                 else:
+                    # Calculate distance and energy ratio between clusters
                     distance = abs(cluster1.pad - cluster2.pad)
                     ratio = cluster2.energy/cluster1.energy
 
                     # Define if statement - when to merge clusters
                     if distance < 5 or (distance < 20 and ratio < 0.1-0.1/20*distance):
-                        #cluster1_idx = cluster_list.index(cluster1)
-                        #cluster2_idx = cluster_list.index(cluster2)
-                        #for item in data_list:
-                        #    if item.cluster == cluster2_idx:
-                        #        item.cluster = cluster1_idx
-                        #for item in data_list:
-                        #    if item.cluster > cluster2_idx:
-                        #        item.cluster -= 1
+                        # This section only to update cluster indices in signals array!
+                        # If will be needed to plot 2d map to check clusters
+                        cluster1_idx = cluster_list.index(cluster1)
+                        cluster2_idx = cluster_list.index(cluster2)
+                        for item in data_list:
+                            if item.cluster == cluster2_idx:
+                                item.cluster = cluster1_idx
+                        for item in data_list:
+                            if item.cluster > cluster2_idx:
+                                item.cluster -= 1
+                        # End of this section
 
+                        # Update cluster1 position, energy, etc.
                         cluster1.merge(cluster2)
+                        # Delete 2nd cluster from the list
                         cluster_list.remove(cluster2)
+                        # Restart double for loop if clusters merged
                         break
+            # If there was no break: no clusters are merged during double for loop.
+            # Exit the while loop. All possible clusters already merged
             else:
                 restart = False
 
@@ -651,8 +720,8 @@ def main():
     # Loop ove all events in tree
     for idx, event in enumerate(Analizer.tree):
         # For debuging. If you need to loop not over all events
-        #if idx == 5000:
-        #    break
+        # if idx != 35:
+        #     continue
 
         # Printout to see how many events are proceded/left.
         # And how much time spend per event.
