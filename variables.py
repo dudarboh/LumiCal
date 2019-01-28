@@ -40,9 +40,9 @@ apv_maps = {}
 apv_maps['tb15_master'] = []
 for i in range(n_channels):
     if i < n_channels-1:
-        apv_maps['tb15_master'] += [190-i if i < 63 else i+129]
+        apv_maps['tb15_master'].append(190-i if i < 63 else i+129)
     else:
-        apv_maps['tb15_master'] += [-1]
+        apv_maps['tb15_master'].append(-1)
 
 # tb15_slave
 apv_maps['tb15_slave'] = [-1, 62, 63, 60, 61, 58, 59, 56, 57, 54, 55, 52, 53,

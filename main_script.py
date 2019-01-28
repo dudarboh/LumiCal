@@ -27,7 +27,7 @@ start_time = time.time()
 gROOT.SetBatch(1)
 
 
-class Signal:
+class Signal():
     '''
     Signal in the detector
     Attributes:
@@ -44,10 +44,11 @@ class Signal:
     value of ADC (Voltage) in apv.
     '''
 
-    def __init__(self, apv_id, apv_channel, apv_signal):
+    def __init__(self, sector, pad, energy):
         # Calculate all parameters of the signal when object created
-        self.sector, self.pad, self.layer = self.position(apv_id, apv_channel)
-        self.energy = self.calib_energy(apv_id, apv_signal)
+        self.sector = sector
+        self.pad = pad
+        self.energy = energy
 
         self.neighbor = -1
         self.cluster = -1
@@ -56,89 +57,6 @@ class Signal:
         phi = np.pi/2+np.pi/12-np.pi/48-np.pi/24*self.sector
         self.x = rho*np.cos(phi)
         self.y = rho*np.sin(phi)
-
-    def position(self, apv_id, apv_channel):
-        '''
-        Input: APV's id and channel
-        Output:Tuple (sector, pad, layer): APV position in the detector
-        Does: Read mapping array. Returns pad id and sector position of APV.
-        Schematicaly pad ids and sectors numbering you can see in variables.py.
-        '''
-
-        # APV_id: odd - slave, even - master
-        if apv_id < 4:
-            if apv_id % 2 == 1:
-                map_name = 'tb15_slave'
-            else:
-                map_name = 'tb15_master'
-        elif apv_id >= 4 and apv_id < 14:
-            if apv_id % 2 == 1:
-                map_name = 'tb16_slave_divider'
-            else:
-                map_name = 'tb16_master_divider'
-        elif apv_id == 14:
-            map_name = 'tb16_master_tab_divider'
-        elif apv_id == 15:
-            map_name = 'tb16_slave_tab_divider'
-
-        # Calculate corresponded position
-        sector = apv_maps[map_name][apv_channel]//n_pads
-        pad = apv_maps[map_name][apv_channel] % n_pads
-        layer = apv_id//2
-
-        return sector, pad, layer
-
-    def calib_energy(self, apv_id, apv_signal):
-        '''
-        Input:APV's id and signal(fit of RC-CR function) in MIPs.
-        Output:Energy deposited in the layer
-        Does: Reads calibration data files. Creates TGraphError with this data.
-        Returns interpolated energy value - apv_energy
-        '''
-        # Optimization
-        array = np.array
-
-        # Calibration only to 1450 signal. No extrapolation. Just cut
-        signal_treshold = 1450.
-        cal_path = calib_path
-        cal_file_name = calib_file_names[apv_id]
-
-        # First point of callibraion curve
-        x = [0.]
-        y = [0.*16.5*1.164]
-        x_err = [1.e-5]
-        y_err = [1.e-5*16.5*1.164]
-
-        # Calibration data in file written as (x,y,x_err,y_err) for each APV_id
-        with open('%(cal_path)s%(cal_file_name)s' % locals(), 'r') as file:
-            for i, line in enumerate(file):
-
-                # skip a line with a title
-                if i == 0:
-                    continue
-
-                # Calibration x-y data is inverted
-                # Normalization D/MC according to L2 *1.09# /4.3 divide when No CD
-                # *16.5*1.164 - is needed in order to get energy in MIPs.
-                x.append(float(line.split('  ')[1]))
-                y.append(float(line.split('  ')[0])*16.5*1.164)
-                x_err.append(float(line.split('  ')[3]))
-                y_err.append(float(line.split('  ')[2])*16.5*1.164)
-
-        x = array(x)
-        y = array(y)
-        x_err = array(x_err)
-        y_err = array(y_err)
-
-        graph = TGraphErrors(len(x), x, y, x_err, y_err)
-
-        # Take into account threshold
-        if apv_signal > signal_treshold:
-            signal = signal_treshold
-        else:
-            signal = apv_signal
-
-        return graph.Eval(signal)
 
 
 class Cluster:
@@ -192,11 +110,21 @@ class Cluster:
 
 class EventData:
     '''
-    Main analysis class
+    Main analysis class. It reads signals data from input root file.
+    Collect clusters in calorimeter from signals using linking-neighbor
+    algorithm. Merge created clusters if they satisfy arbitraty chosen condition.
+    Fill all created histograms with corresponded data.
 
     Attributes:
-    __init__() - when created opens root file to read apv's data.
-    Creates histograms to write future results
+    create_histos() - create histograms to output
+    desired distributions
+    fill_histos() - fill those histos with parameters of event.
+    extract_data() - reads signals from the root file
+    clustering_in_towers() - finds the most energetic neighbors for all signals
+    (set_neighbors()). Collect signals into clusters (set_clusters()). Merge
+    them if(something) (merge_clusters()).
+    PlotCheck - obsolete. To check 2d map of the event
+    PlotCluterCheck - more obsolete
     '''
     def __init__(self, filename):
         # Create root file and open "filename" file
@@ -236,14 +164,24 @@ class EventData:
         self.h_dict[h_key] = TH1F(h_key, h_title, 200, 0, 10)
 
         # 2D:Hits weighted with energy in tracker1
-        h_key = 'position_energy_for_tracker1'
-        h_title = '2D pos_energy tracker1;sector;pad'
-        self.h_dict[h_key] = TH2F(h_key, h_title, n_sectors+2, 0, n_sectors+2, n_pads, 0, n_pads)
+        h_key = '2d_map_tracker1_energy'
+        h_title = 'energy weighed cells in tracker1;sector;pad'
+        self.h_dict[h_key] = TH2F(h_key, h_title, n_sectors+2, 0, n_sectors+2, 64, 0, 64)
 
         # 2D:Hits weighted with energy in tracker2
-        h_key = 'position_energy_for_tracker2'
-        h_title = '2D pos_energy tracker2;sector;pad'
-        self.h_dict[h_key] = TH2F(h_key, h_title, n_sectors+2, 0, n_sectors+2, n_pads, 0, n_pads)
+        h_key = '2d_map_tracker2_energy'
+        h_title = 'energy weighted cells in tracker2;sector;pad'
+        self.h_dict[h_key] = TH2F(h_key, h_title, n_sectors+2, 0, n_sectors+2, 64, 0, 64)
+
+        # 2D:Hits in tracker1
+        h_key = '2d_map_tracker1_hits'
+        h_title = 'hits in tracker1;sector;pad'
+        self.h_dict[h_key] = TH2F(h_key, h_title, n_sectors+2, 0, n_sectors+2, 64, 0, 64)
+
+        # 2D:Hits in tracker2
+        h_key = '2d_map_tracker2_hits'
+        h_title = 'hits in tracker2;sector;pad'
+        self.h_dict[h_key] = TH2F(h_key, h_title, n_sectors+2, 0, n_sectors+2, 64, 0, 64)
 
         # Distance between cluster and hit in tracker1 weighted with hit energy
         h_key = 'h_cluster_tracker1_distance'
@@ -308,7 +246,6 @@ class EventData:
         Fills all histograms (if created) with calculated
         variables or properties.
         '''
-
         # Number of clusters
         h_key = 'h_n_clusters'
         if h_key in self.h_dict:
@@ -332,16 +269,28 @@ class EventData:
             self.h_dict[h_key].Fill(sum([signal.energy for signal in self.tracker2_data]))
 
         # 2D: Hits position weighted with energy in tracker1
-        h_key = 'position_energy_for_tracker1'
+        h_key = '2d_map_tracker1_energy'
         if h_key in self.h_dict:
             for signal in self.tracker1_data:
                 self.h_dict[h_key].Fill(signal.sector, signal.pad, signal.energy)
 
         # 2D Hits position weighted with energy in tracker2
-        h_key = 'position_energy_for_tracker2'
+        h_key = '2d_map_tracker2_energy'
         if h_key in self.h_dict:
             for signal in self.tracker2_data:
                 self.h_dict[h_key].Fill(signal.sector, signal.pad, signal.energy)
+
+        # 2D: Hits positions in tracker1
+        h_key = '2d_map_tracker1_hits'
+        if h_key in self.h_dict:
+            for signal in self.tracker1_data:
+                self.h_dict[h_key].Fill(signal.sector, signal.pad)
+
+        # 2D Hits positions in tracker2
+        h_key = '2d_map_tracker2_hits'
+        if h_key in self.h_dict:
+            for signal in self.tracker2_data:
+                self.h_dict[h_key].Fill(signal.sector, signal.pad)
 
         for idx, cluster in enumerate(self.cluster_list):
             if idx not in range(3):
@@ -400,19 +349,20 @@ class EventData:
         h_key = 'h_cluster_tracker1_position'
         if h_key in self.h_dict:
             for signal in self.tracker1_data:
-                distance = abs(signal.pad-cluster1_pad)
                 self.h_dict[h_key].Fill(signal.pad)
 
         h_key = 'h_cluster_tracker2_position'
         if h_key in self.h_dict:
             for signal in self.tracker2_data:
-                distance = abs(signal.pad-cluster1_pad)
                 self.h_dict[h_key].Fill(signal.pad)
 
     def extract_data(self, event):
         '''
         Extracts signals of event.THE MOST TIME CONSUMING FUNCTION :(
         '''
+        # Make local variables
+        position = self.position
+        calib_energy = self.calib_energy
 
         # Read needed branches from the input ROOT file.
         id_arr = event.apv_id
@@ -422,57 +372,145 @@ class EventData:
         apv_fit_tau = event.apv_fit_tau
         apv_fit_t0 = event.apv_fit_t0
         apv_bint1 = event.apv_bint1
-
         # Lists for signals
-        self.calorimeter_data = []
-        self.tracker1_data = []
-        self.tracker2_data = []
+        calorimeter_data = []
+        tracker1_data = []
+        tracker2_data = []
 
         # Loop through all signals(hits) in the event
         for hit in range(len(id_arr)):
-            # Create signal object. It appears with it's position and energy
-            # already calculated
-            signal = Signal(id_arr[hit], channel_arr[hit], signal_arr[hit])
-
-            # Cuts: only 2 central sectors, exclude bad mapping(pad<0), etc
-            # It was ctrl+c ctrl+v from Sasha's code.
-            if (signal.sector == 0 or signal.sector == 3
-               or (signal.sector == 1 and signal.pad < 20)
-               or signal.pad < 0
-               or apv_fit_tau[hit] < 1 or apv_fit_tau[hit] > 3
-               or signal_arr[hit] > 2000 or signal_arr[hit] < 0.75
-               or apv_nn_output[hit] < 0.5
+            if (apv_fit_tau[hit] < 1 or apv_fit_tau[hit] > 3
+               or signal_arr[hit] > 2000.
                or apv_fit_t0[hit] < (apv_bint1[hit]-2.7)
                or apv_fit_t0[hit] > (apv_bint1[hit]-0.5)):
                 continue
 
+            # Calculate position
+            sector, pad, layer = position(id_arr[hit], channel_arr[hit])
+
+            if (sector == 0 or sector == 3
+               or (sector == 1 and pad < 20)
+               or sector < 0  # This one is changed due to python C++ difference in %.
+               or (layer < 2 and (signal_arr[hit] < 0. or apv_nn_output[hit] < 0.5))):
+                continue
+
+            energy = calib_energy(id_arr[hit], signal_arr[hit])
             # Ignore noisy cells in calorimeter
-            if signal.energy < 1.4 and signal.layer > 1:
+            if layer >= 2 and (energy < 1.4 or apv_nn_output[hit] < 0.5):
                 continue
 
             # Choose what is data_list(tracker1/2,calorimeter)
-            if signal.layer == 0:
-                data_list = self.tracker1_data
-            elif signal.layer == 1:
-                data_list = self.tracker2_data
+            if layer == 0:
+                data_list = tracker1_data
+            elif layer == 1:
+                data_list = tracker2_data
             else:
-                data_list = self.calorimeter_data
+                data_list = calorimeter_data
 
             # If signal with this position already in the list: just add energy
             # Else: Add this signal to list and add energy
             for item in data_list:
-                if (item.sector, item.pad) == (signal.sector, signal.pad):
-                    item.energy += signal.energy
+                if (item.sector, item.pad) == (sector, pad):
+                    item.energy += energy
                     break
             else:
-                data_list.append(signal)
+                data_list.append(Signal(sector, pad, energy))
 
         # If no signals in calorimeter - skip event
-        if len(self.calorimeter_data) == 0:
+        if len(calorimeter_data) == 0:
             return 0
 
+        self.calorimeter_data = calorimeter_data
+        self.tracker1_data = tracker1_data
+        self.tracker2_data = tracker2_data
         # If everything is ok
         return 1
+
+    def position(self, apv_id, apv_channel):
+        '''
+        Input: APV's id and channel
+        Output:Tuple (sector, pad, layer): APV position in the detector
+        Does: Read mapping array. Returns pad id and sector position of APV.
+        Schematicaly pad ids and sectors numbering you can see in variables.py.
+        '''
+
+        # APV_id: odd - slave, even - master
+        if apv_id < 4:
+            if apv_id % 2 == 1:
+                map_name = 'tb15_slave'
+            else:
+                map_name = 'tb15_master'
+        elif apv_id >= 4 and apv_id < 14:
+            if apv_id % 2 == 1:
+                map_name = 'tb16_slave_divider'
+            else:
+                map_name = 'tb16_master_divider'
+        elif apv_id == 14:
+            map_name = 'tb16_master_tab_divider'
+        elif apv_id == 15:
+            map_name = 'tb16_slave_tab_divider'
+
+        # Calculate corresponded position
+        layer = apv_id//2
+        # Case of -1 trace separetly. Because it caused a bug which is hard to find!!!
+        # In C++ modulo "%" is different for negative numbers.
+        # In python -1%64 result in 63. NOT -1 as expercted
+        sector = apv_maps[map_name][apv_channel]//n_pads
+        pad = apv_maps[map_name][apv_channel] % n_pads
+
+        return sector, pad, layer
+
+    def calib_energy(self, apv_id, apv_signal):
+        '''
+        Input:APV's id and signal(fit of RC-CR function) in MIPs.
+        Output:Energy deposited in the layer
+        Does: Reads calibration data files. Creates TGraphError with this data.
+        Returns interpolated energy value - apv_energy
+        '''
+        # Optimization
+        array = np.array
+
+        # Calibration only to 1450 signal. No extrapolation. Just cut
+        signal_treshold = 1450.
+        cal_path = calib_path
+        cal_file_name = calib_file_names[apv_id]
+
+        # First point of callibraion curve
+        x = [0.]
+        y = [0.*16.5*1.164]
+        x_err = [1.e-5]
+        y_err = [1.e-5*16.5*1.164]
+
+        # Calibration data in file written as (x,y,x_err,y_err) for each APV_id
+        with open('%(cal_path)s%(cal_file_name)s' % locals(), 'r') as file:
+            for i, line in enumerate(file):
+
+                # skip a line with a title
+                if i == 0:
+                    continue
+
+                # Calibration x-y data is inverted
+                # Normalization D/MC according to L2 *1.09# /4.3 divide when No CD
+                # *16.5*1.164 - is needed in order to get energy in MIPs.
+                x.append(float(line.split('  ')[1]))
+                y.append(float(line.split('  ')[0])*16.5*1.164)
+                x_err.append(float(line.split('  ')[3]))
+                y_err.append(float(line.split('  ')[2])*16.5*1.164)
+
+        x = array(x)
+        y = array(y)
+        x_err = array(x_err)
+        y_err = array(y_err)
+
+        graph = TGraphErrors(len(x), x, y, x_err, y_err)
+
+        # Take into account threshold
+        if apv_signal > signal_treshold:
+            signal = signal_treshold
+        else:
+            signal = apv_signal
+
+        return graph.Eval(signal)
 
     def clustering_in_towers(self, merge='on'):
         '''
@@ -608,74 +646,6 @@ class EventData:
             else:
                 restart = False
 
-    # Check event methods
-    def PlotCheck(self, event, option='calorimeter'):
-        '''Plots map of signals in calorimeter towers as 2d histo.'''
-        # Don't draw statistics on 2d map histo
-        if option == 'calorimeter':
-            data_list = self.calorimeter_data
-        elif option == 'tracker1':
-            data_list = self.tracker1_data
-        elif option == 'tracker2':
-            data_list = self.tracker2_data
-        else:
-            return 0
-
-        gStyle.SetOptStat(0)
-        # Name of the histo
-        h_key = 'check_{}_event_{}'.format(option, event.apv_evt)
-        # Local to improve speed (not necessary)
-        h_dict = self.h_dict
-        # Try is faster than if!
-        # Fill histo. If does't exist: Create and fill
-        try:
-            for signal in data_list:
-                h_dict[h_key].Fill(signal.sector, signal.pad, signal.energy)
-        except KeyError:
-            h_dict[h_key] = TH2F(h_key, '', n_sectors+2, 0, n_sectors+2, n_pads, 0, n_pads)
-            h_dict[h_key].SetTitle('event_{};sector;pad'.format(event.apv_evt))
-            for signal in data_list:
-                h_dict[h_key].Fill(signal.sector, signal.pad, signal.energy)
-
-        # Create Canvas and draw histo
-        c1 = TCanvas('c1', h_key, 1800, 1800)
-        h_dict[h_key].Draw("COLZTEXT")
-
-        # Print picture to the png image
-        c1.Print('./checks/'+h_key+'.png')
-        # Plot statistic again. For others histos
-        gStyle.SetOptStat(1)
-
-    def PlotClusterCheck(self, event):
-        '''Plots map of clusters as 2d histo'''
-        # Inverse Palette, so 1st most energetic cluster will be the brightest
-        TColor().InvertPalette()
-        # Dont draw statistics
-        gStyle.SetOptStat(0)
-
-        # Name of the histo
-        h_key = 'check_cluster_event_{}'.format(event.apv_evt)
-        h_dict = self.h_dict
-        # Try faster than if!
-        # Try Fill, if KeyError: Create and Fill
-        try:
-            for signal in self.calorimeter_data:
-                h_dict[h_key].Fill(signal.sector, signal.pad, signal.cluster+1)
-        except KeyError:
-            h_dict[h_key] = TH2F(h_key, '', n_sectors+2, 0, n_sectors+2, n_pads, 0, n_pads)
-            h_dict[h_key].SetTitle('cluster_event_{};sector;pad'.format(event.apv_evt))
-            for signal in self.calorimeter_data:
-                h_dict[h_key].Fill(signal.sector, signal.pad, signal.cluster+1)
-
-        # Create canvas and Draw
-        c1 = TCanvas('c1', h_key, 1800, 1800)
-        h_dict[h_key].Draw("COLZTEXT")
-
-        # Print image and return palette and statistics settings on default values
-        c1.Print('./checks/'+h_key+'.png')
-        TColor().InvertPalette()
-        gStyle.SetOptStat(1)
-
 
 def langaus_fit(h_name):
     '''
@@ -720,8 +690,8 @@ def main():
     # Loop ove all events in tree
     for idx, event in enumerate(Analizer.tree):
         # For debuging. If you need to loop not over all events
-        # if idx != 35:
-        #     continue
+        #if idx != 200:
+        #    continue
 
         # Printout to see how many events are proceded/left.
         # And how much time spend per event.
@@ -734,7 +704,7 @@ def main():
 
         # Extract data.
         check = Analizer.extract_data(event)
-        # if bad data(energy<0) - skip event
+        # If no hits - skip event
         if check == 0:
             continue
 
@@ -744,7 +714,7 @@ def main():
             continue
 
         # Analize only events with 1 cluster
-        Analizer.fill_histos()
+        filler = Analizer.fill_histos()
 
     # Update/create output file, where to write all histograms
     output_file = TFile('RENAME.root', 'update')
