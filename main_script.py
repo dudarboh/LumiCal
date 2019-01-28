@@ -144,102 +144,112 @@ class EventData:
         '''
         self.h_dict = {}
         # Number of clusters
-        h_key = 'h_n_clusters'
+        h_key = 'Nclusters'
         h_title = 'N clusters;N Clusters;N Events'
         self.h_dict[h_key] = TH1F(h_key, h_title, 15, 0, 15)
 
         # Energy of all 1pad clusters in calorimeter
-        h_key = 'h_energy_1pad_clusters'
-        h_title = 'Energy: 1 pad clusters;Energy [MIP];N events'
+        h_key = '1PadClustersEnergy'
+        h_title = 'Energy of every 1 pad cluster;Energy [MIP];N events'
         #self.h_dict[h_key] = TH1F(h_key, h_title, 2000, 0, 20)
 
         # Energy of all hits in tracker1
-        h_key = 'h_tracker1_energy'
-        h_title = 'Tracker1 Energy;Energy [MIP];N events'
+        h_key = 'Tracker1Energy'
+        h_title = 'Total energy in tracker1 per event;Energy [MIP];N events'
         self.h_dict[h_key] = TH1F(h_key, h_title, 200, 0, 10)
 
         # Energy of all hits in tracker2
-        h_key = 'h_tracker2_energy'
-        h_title = 'Tracker2 Energy;Energy [MIP];N events'
+        h_key = 'Tracker2Energy'
+        h_title = 'Total energy in tracker2 per event;Energy [MIP];N events'
         self.h_dict[h_key] = TH1F(h_key, h_title, 200, 0, 10)
 
         # 2D:Hits weighted with energy in tracker1
-        h_key = '2d_map_tracker1_energy'
-        h_title = 'energy weighed cells in tracker1;sector;pad'
+        h_key = 'Tracker1CellsEnergy'
+        h_title = 'Tracker1: Hits weighted with energy;sector;pad'
         self.h_dict[h_key] = TH2F(h_key, h_title, n_sectors+2, 0, n_sectors+2, 64, 0, 64)
 
         # 2D:Hits weighted with energy in tracker2
-        h_key = '2d_map_tracker2_energy'
-        h_title = 'energy weighted cells in tracker2;sector;pad'
+        h_key = 'Tracker2CellsEnergy'
+        h_title = 'Tracker2: Hits weighted with energy;sector;pad'
         self.h_dict[h_key] = TH2F(h_key, h_title, n_sectors+2, 0, n_sectors+2, 64, 0, 64)
 
         # 2D:Hits in tracker1
-        h_key = '2d_map_tracker1_hits'
-        h_title = 'hits in tracker1;sector;pad'
+        h_key = 'Tracker1CellsHits'
+        h_title = 'Tracker1: hits;sector;pad'
         self.h_dict[h_key] = TH2F(h_key, h_title, n_sectors+2, 0, n_sectors+2, 64, 0, 64)
 
         # 2D:Hits in tracker2
-        h_key = '2d_map_tracker2_hits'
-        h_title = 'hits in tracker2;sector;pad'
+        h_key = 'Tracker2CellsHits'
+        h_title = 'Tracker2: hits;sector;pad'
         self.h_dict[h_key] = TH2F(h_key, h_title, n_sectors+2, 0, n_sectors+2, 64, 0, 64)
 
         # Distance between cluster and hit in tracker1 weighted with hit energy
-        h_key = 'h_cluster_tracker1_distance'
-        h_title = 'Tracker1 hits vs cluster;Distance cluster-hit [pad];Summed hit energies'
+        h_key = 'Tracker1ClusterDistance'
+        h_title = 'Tracker1 hits weighted with energy vs distance to cluster;d = |cluster_{pad}-hit_{tr1, pad}| [pad];Energy in tracker1'
         self.h_dict[h_key] = TH1F(h_key, h_title, 300, 0, 60)
 
         # Distance between cluster and hit in tracker2 weighted with hit energy
-        h_key = 'h_cluster_tracker2_distance'
-        h_title = 'Tracker2 hits vs cluster;Distance cluster-hit [pad];Summed hit energies'
+        h_key = 'Tracker2ClusterDistance'
+        h_title = 'Tracker2 hits weighted with energy vs distance to cluster;d = |cluster_{pad}-hit_{tr2, pad}| [pad];Energy in tracker2'
         self.h_dict[h_key] = TH1F(h_key, h_title, 300, 0, 60)
 
+        # 2D hit energy vs distance to cluster
+        h_key = 'Tracker1EnergyClusterDistance'
+        h_title = 'Tracker1 hits;d_{clst-tr1}, [pad];Energy'
+        self.h_dict[h_key] = TH2F(h_key, h_title, 300, 0, 60, 200, 0, 10)
+
+        # Distance between cluster and hit in tracker2 weighted with hit energy
+        h_key = 'Tracker2EnergyClusterDistance'
+        h_title = 'Tracker2 hits;d_{clst-tr1}, [pad];Energy'
+        self.h_dict[h_key] = TH2F(h_key, h_title, 300, 0, 60, 200, 0, 10)
+
         # Hit position for tracker1
-        h_key = 'h_cluster_tracker1_position'
+        h_key = 'Tracker1Pads'
         h_title = 'Tracker1 hits position;position [pad];N hits'
         self.h_dict[h_key] = TH1F(h_key, h_title, 64, 0, 64)
 
         # Hit position for tracker2
-        h_key = 'h_cluster_tracker2_position'
+        h_key = 'Tracker2Pads'
         h_title = 'Tracker2 hits position;position [pad];N hits'
         self.h_dict[h_key] = TH1F(h_key, h_title, 64, 0, 64)
 
-        for cluster in range(1):
+        for cluster in range(3):
             # Cluster energy
-            h_key = 'h_cluster_energy_{}'.format(cluster+1)
-            h_title = 'Energy: {} clust;Energy [MIP];N events'.format(cluster+1)
+            h_key = 'Cluster{}Energy'.format(cluster+1)
+            h_title = 'Energy of {} cluster;Energy [MIP];N events'.format(cluster+1)
             self.h_dict[h_key] = TH1F(h_key, h_title, 2000, 0, 500)
 
             # Cluster pad position
-            h_key = 'h_cluster_pad_pos_{}'.format(cluster+1)
-            h_title = 'Position: {} cluster;pos [pad];N events'.format(cluster+1)
+            h_key = 'Cluster{}Pad'.format(cluster+1)
+            h_title = 'Pad of {} cluster;pos [pad];N events'.format(cluster+1)
             self.h_dict[h_key] = TH1F(h_key, h_title, 200, 0, n_pads)
 
             # Cluster number of pads
-            h_key = 'h_cluster_npads_{}'.format(cluster+1)
-            h_title = 'N pads: {} cluster;N pads;N events'.format(cluster+1)
+            h_key = 'Cluster{}NPads'.format(cluster+1)
+            h_title = 'Number of pads of {} cluster;N pads;N events'.format(cluster+1)
             self.h_dict[h_key] = TH1F(h_key, h_title, 30, 0, 30)
 
-        # for cluster1 in range(1):
-        #     for cluster2 in range(1, 3):
-        #         # Distance in pads between cluster1 and cluster2
-        #         h_key = 'h_cluster_pad_distance_{}_vs_{}'.format(cluster1+1, cluster2+1)
-        #         h_title = 'Pad distance between: {} and {} clusters;N pads;N events'.format(cluster1+1, cluster2+1)
-        #         self.h_dict[h_key] = TH1F(h_key, h_title, 400, 0, 60)
+        for cluster1 in range(1):
+            for cluster2 in range(1, 3):
+                # Distance in pads between cluster1 and cluster2
+                h_key = 'Cluster{}Cluster{}PadDistance'.format(cluster1+1, cluster2+1)
+                h_title = 'Pad distance between: {} and {} clusters;d, [pad];N events'.format(cluster1+1, cluster2+1)
+                self.h_dict[h_key] = TH1F(h_key, h_title, 400, 0, 60)
 
-        #         # Distance in mm between cluster1 and cluster2
-        #         h_key = 'h_cluster_coord_distance_{}_vs_{}'.format(cluster1+1, cluster2+1)
-        #         h_title = 'Distance between: {} and {} clusters; d, [mm];N events'.format(cluster1+1, cluster2+1)
-        #         self.h_dict[h_key] = TH1F(h_key, h_title, 500, 0, 100)
+                # Distance in mm between cluster1 and cluster2
+                h_key = 'Cluster{}Cluster{}CoordDistance'.format(cluster1+1, cluster2+1)
+                h_title = 'Distance in mm between: {} and {} clusters; d, [mm];N events'.format(cluster1+1, cluster2+1)
+                self.h_dict[h_key] = TH1F(h_key, h_title, 500, 0, 100)
 
-        #         # Energy ratio of cluster2 over cluster1
-        #         h_key = 'h_cluster_ratio_{}_over_{}'.format(cluster2+1, cluster1+1)
-        #         h_title = 'Energy ratio: {} over {} clusters;Ratio;N events'.format(cluster2+1, cluster1+1)
-        #         self.h_dict[h_key] = TH1F(h_key, h_title, 400, 0, 1)
+                # Energy ratio of cluster2 over cluster1
+                h_key = 'Cluster{}Cluster{}EnergyRatio'.format(cluster2+1, cluster1+1)
+                h_title = 'Energy ratio: {} over {} clusters;Energy ratio;N events'.format(cluster2+1, cluster1+1)
+                self.h_dict[h_key] = TH1F(h_key, h_title, 400, 0, 1)
 
-        #         # 2D: Distance in pads between clusters vs their energy ratio
-        #         h_key = 'h_cluster_dist_ratio_for_{}_and_{}'.format(cluster1+1, cluster2+1)
-        #         h_title = 'Distance vs ratio: {} and {} clusters;Distance;Ratio;N Events'.format(cluster1+1, cluster2+1)
-        #         self.h_dict[h_key] = TH2F(h_key, '', 400, 0, 60, 400, 0, 1)
+                # 2D: Distance in pads between clusters vs their energy ratio
+                h_key = 'Cluster{}Cluster{}EnergyRatiovsPadDistance'.format(cluster1+1, cluster2+1)
+                h_title = 'Pad Distance vs Energy ratio for {} and {} clusters;d, [pad];Energy ratio;N Events'.format(cluster1+1, cluster2+1)
+                self.h_dict[h_key] = TH2F(h_key, '', 400, 0, 60, 400, 0, 1)
 
     def fill_histos(self):
         '''
@@ -247,63 +257,103 @@ class EventData:
         variables or properties.
         '''
         # Number of clusters
-        h_key = 'h_n_clusters'
+        h_key = 'Nclusters'
         if h_key in self.h_dict:
             self.h_dict[h_key].Fill(len(self.cluster_list))
 
         # Energy of all 1pad clusters
-        h_key = 'h_energy_1pad_clusters'
+        h_key = '1PadClustersEnergy'
         if h_key in self.h_dict:
             for cluster in self.cluster_list:
                 if cluster.n_pads == 1:
                     self.h_dict[h_key].Fill(cluster.energy)
 
-        # Energy of all hits in tracker1
-        h_key = 'h_tracker1_energy'
-        if h_key in self.h_dict:
-            self.h_dict[h_key].Fill(sum([signal.energy for signal in self.tracker1_data]))
+        # ###TRACKER HISTOGRAMS###
+        if len(self.cluster_list) == 1:
+            # Energy of all hits in tracker1
+            h_key = 'Tracker1Energy'
+            if h_key in self.h_dict:
+                self.h_dict[h_key].Fill(sum([signal.energy for signal in self.tracker1_data]))
 
-        # Energy of all hits in tracker2
-        h_key = 'h_tracker2_energy'
-        if h_key in self.h_dict:
-            self.h_dict[h_key].Fill(sum([signal.energy for signal in self.tracker2_data]))
+            # Energy of all hits in tracker2
+            h_key = 'Tracker2Energy'
+            if h_key in self.h_dict:
+                self.h_dict[h_key].Fill(sum([signal.energy for signal in self.tracker2_data]))
 
-        # 2D: Hits position weighted with energy in tracker1
-        h_key = '2d_map_tracker1_energy'
-        if h_key in self.h_dict:
-            for signal in self.tracker1_data:
-                self.h_dict[h_key].Fill(signal.sector, signal.pad, signal.energy)
+            # 2D: Hits position weighted with energy in tracker1
+            h_key = 'Tracker1CellsEnergy'
+            if h_key in self.h_dict:
+                for signal in self.tracker1_data:
+                    self.h_dict[h_key].Fill(signal.sector, signal.pad, signal.energy)
 
-        # 2D Hits position weighted with energy in tracker2
-        h_key = '2d_map_tracker2_energy'
-        if h_key in self.h_dict:
-            for signal in self.tracker2_data:
-                self.h_dict[h_key].Fill(signal.sector, signal.pad, signal.energy)
+            # 2D Hits position weighted with energy in tracker2
+            h_key = 'Tracker2CellsEnergy'
+            if h_key in self.h_dict:
+                for signal in self.tracker2_data:
+                    self.h_dict[h_key].Fill(signal.sector, signal.pad, signal.energy)
 
-        # 2D: Hits positions in tracker1
-        h_key = '2d_map_tracker1_hits'
-        if h_key in self.h_dict:
-            for signal in self.tracker1_data:
-                self.h_dict[h_key].Fill(signal.sector, signal.pad)
+            # 2D: Hits positions in tracker1
+            h_key = 'Tracker1CellsHits'
+            if h_key in self.h_dict:
+                for signal in self.tracker1_data:
+                    self.h_dict[h_key].Fill(signal.sector, signal.pad)
 
-        # 2D Hits positions in tracker2
-        h_key = '2d_map_tracker2_hits'
-        if h_key in self.h_dict:
-            for signal in self.tracker2_data:
-                self.h_dict[h_key].Fill(signal.sector, signal.pad)
+            # 2D Hits positions in tracker2
+            h_key = 'Tracker2CellsHits'
+            if h_key in self.h_dict:
+                for signal in self.tracker2_data:
+                    self.h_dict[h_key].Fill(signal.sector, signal.pad)
+
+            cluster1_pad = self.cluster_list[0].pad
+
+            h_key = 'Tracker1EnergyClusterDistance'
+            if h_key in self.h_dict:
+                for signal in self.tracker1_data:
+                    distance = abs(signal.pad-cluster1_pad)
+                    self.h_dict[h_key].Fill(distance, signal.energy)
+
+            h_key = 'Tracker2EnergyClusterDistance'
+            if h_key in self.h_dict:
+                for signal in self.tracker2_data:
+                    distance = abs(signal.pad-cluster1_pad)
+                    self.h_dict[h_key].Fill(distance, signal.energy)
+
+            h_key = 'Tracker1ClusterDistance'
+            if h_key in self.h_dict:
+                for signal in self.tracker1_data:
+                    distance = abs(signal.pad-cluster1_pad)
+                    self.h_dict[h_key].Fill(distance, signal.energy)
+
+            h_key = 'Tracker2ClusterDistance'
+            if h_key in self.h_dict:
+                for signal in self.tracker2_data:
+                    distance = abs(signal.pad-cluster1_pad)
+                    self.h_dict[h_key].Fill(distance, signal.energy)
+
+            h_key = 'Tracker1Pads'
+            if h_key in self.h_dict:
+                for signal in self.tracker1_data:
+                    self.h_dict[h_key].Fill(signal.pad)
+
+            h_key = 'Tracker2Pads'
+            if h_key in self.h_dict:
+                for signal in self.tracker2_data:
+                    self.h_dict[h_key].Fill(signal.pad)
+
+        # ###TRACKER HISTOGRAMS END###
 
         for idx, cluster in enumerate(self.cluster_list):
             if idx not in range(3):
                 break
-            h_key = 'h_cluster_energy_{}'.format(idx+1)
+            h_key = 'Cluster{}Energy'.format(idx+1)
             if h_key in self.h_dict:
                 self.h_dict[h_key].Fill(cluster.energy)
 
-            h_key = 'h_cluster_pad_pos_{}'.format(idx+1)
+            h_key = 'Cluster{}Pad'.format(idx+1)
             if h_key in self.h_dict:
                 self.h_dict[h_key].Fill(cluster.pad)
 
-            h_key = 'h_cluster_npads_{}'.format(idx+1)
+            h_key = 'Cluster{}NPads'.format(idx+1)
             if h_key in self.h_dict:
                 self.h_dict[h_key].Fill(cluster.n_pads)
 
@@ -313,48 +363,25 @@ class EventData:
                     continue
                 cluster1 = self.cluster_list[idx1]
                 cluster2 = self.cluster_list[idx2]
-                h_key = 'h_cluster_pad_distance_{}_vs_{}'.format(idx+1, idx2+1)
+                h_key = 'Cluster{}Cluster{}PadDistance'.format(idx1+1, idx2+1)
                 if h_key in self.h_dict:
                     distance = abs(cluster1.pad-cluster2.pad)
                     self.h_dict[h_key].Fill(distance)
 
-                h_key = 'h_cluster_coord_distance_{}_vs_{}'.format(idx+1, idx2+1)
+                h_key = 'Cluster{}Cluster{}CoordDistance'.format(idx1+1, idx2+1)
                 if h_key in self.h_dict:
                     distance = ((cluster1.x-cluster2.x)**2+(cluster1.y-cluster2.y)**2)**0.5
                     self.h_dict[h_key].Fill(distance)
 
-                h_key = 'h_cluster_ratio_{}_over_{}'.format(idx2+1, idx+1)
+                h_key = 'Cluster{}Cluster{}EnergyRatio'.format(idx2+1, idx1+1)
                 if h_key in self.h_dict:
                     energy_ratio = cluster2.energy/cluster1.energy
                     self.h_dict[h_key].Fill(energy_ratio)
 
-                h_key = 'h_cluster_dist_ratio_for_{}_and_{}'.format(idx+1, idx2+1)
+                h_key = 'Cluster{}Cluster{}EnergyRatiovsPadDistance'.format(idx1+1, idx2+1)
                 if h_key in self.h_dict:
                     distance = abs(cluster1.pad-cluster2.pad)
                     self.h_dict[h_key].Fill(distance, energy_ratio)
-
-        cluster1_pad = self.cluster_list[0].pad
-        h_key = 'h_cluster_tracker1_distance'
-        if h_key in self.h_dict:
-            for signal in self.tracker1_data:
-                distance = abs(signal.pad-cluster1_pad)
-                self.h_dict[h_key].Fill(distance, signal.energy)
-
-        h_key = 'h_cluster_tracker2_distance'
-        if h_key in self.h_dict:
-            for signal in self.tracker2_data:
-                distance = abs(signal.pad-cluster1_pad)
-                self.h_dict[h_key].Fill(distance, signal.energy)
-
-        h_key = 'h_cluster_tracker1_position'
-        if h_key in self.h_dict:
-            for signal in self.tracker1_data:
-                self.h_dict[h_key].Fill(signal.pad)
-
-        h_key = 'h_cluster_tracker2_position'
-        if h_key in self.h_dict:
-            for signal in self.tracker2_data:
-                self.h_dict[h_key].Fill(signal.pad)
 
     def extract_data(self, event):
         '''
@@ -538,9 +565,6 @@ class EventData:
         if merge == 'on':
             self.merge_clusters(self.calorimeter_data, self.cluster_list)
 
-        # Analize only events with 1 cluster.
-        if len(self.cluster_list) != 1:
-            return 0
         # If everything is ok
         return 1
 
@@ -709,9 +733,7 @@ def main():
             continue
 
         # Do clustering to signals with merging
-        check = Analizer.clustering_in_towers(merge='on')
-        if check == 0:
-            continue
+        Analizer.clustering_in_towers(merge='on')
 
         # Analize only events with 1 cluster
         filler = Analizer.fill_histos()
