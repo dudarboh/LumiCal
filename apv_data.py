@@ -1,48 +1,34 @@
-from ROOT import TMath
-from scipy.ndimage.filters import maximum_filter
-from scipy.ndimage.morphology import generate_binary_structure, binary_erosion
+'''
+## coverts APV's channel to it's pad position (id) by the following scheme:
+Sectors:
+     0           1         2         3
+ _________________________________________
+|   63     |    127   |   191   |   255   |
+|-----------------------------------------|
+ |   62    |    126   |   190   |  254   |
+ |---------------------------------------|
+  |   61    |   125   |   189  |  253   |
+  |-------------------------------------|
 
+         .........................
+         .........................
 
-# ###
-
-# ## coverts APV's channel to it's pad position (id) by the following scheme:
-# Sectors:
-#      0           1         2         3
-#  _________________________________________
-# |   63     |    127   |   191   |   255   |
-# |-----------------------------------------|
-#  |   62    |    126   |   190   |  254   |
-#  |---------------------------------------|
-#   |   61    |   125   |   189  |  253   |
-#   |-------------------------------------|
-#
-#          .........................
-#          .........................
-#
-#          |  0  |  64 | 128 | 192 |
-#          |_____|_____|_____|_____|
-
-# Number of APVs used in experiment
-# n_apvs = 16
-# Number of channels of one APV
-n_channels = 128
-# Number of layers in experiment
-n_layers = 6
-# Number of sectors of the layer in the experiment
-n_sectors = 4
-# Number of pads of one sector
-n_pads = 64
-
+         |  0  |  64 | 128 | 192 |
+         |_____|_____|_____|_____|
+Number of APVs: 16
+Number of channels of one APV: 128
+Number of layers in experiment: 6(7) 0,1 - trackers, >2 - calorimeter
+Number of sectors in the one layer: 4
+Number of pads in one sector: 64
+'''
+from ROOT import TGraphErrors, TMath, TF1
+import numpy as np
+from itertools import islice
 apv_maps = {}
 
-
 # tb15_master
-apv_maps['tb15_master'] = []
-for i in range(n_channels):
-    if i < n_channels-1:
-        apv_maps['tb15_master'].append(190-i if i < 63 else i+129)
-    else:
-        apv_maps['tb15_master'].append(-1)
+apv_maps['tb15_master'] = [190-i if i < 63 else i+129 for i in range(127)]
+apv_maps['tb15_master'].append(-1)
 
 # tb15_slave
 apv_maps['tb15_slave'] = [-1, 62, 63, 60, 61, 58, 59, 56, 57, 54, 55, 52, 53,
@@ -185,37 +171,103 @@ def langaufun(x, par):
     return par[2]*step*summ*invsq2pi/par[3]
 
 
-def detect_peaks(array):
-    """
-    Takes an 2d array and detect the peaks using the local maximum filter.
-    Returns a boolean mask of the peaks (i.e. 1 when
-    the pixel's value is the neighborhood maximum, 0 otherwise)
-    """
+def langaus_fit(h_name):
+    '''
+    Fits energy distribution from ROOT file with Landau-Gaus
+    convolution function.
+    !!!!!ITS BROKEN. REPAIR !!!!!
+    '''
+    # Landau-Gauss fitting:
+    fit_function = TF1('fit_function', langaufun, 0.1, 6, 4)
+    fit_function.SetNpx(300)
 
-    # define an 8-connected neighborhood - count diagonal elements as
-    # neighbors
-    neighborhood = generate_binary_structure(2, 2)
+    # Starting parameters
+    fit_function.SetParameters(0.5, 1., 2600., 0.1)
+    fit_function.SetParNames('Width', 'MP', 'Area', 'GSigma')
 
-    # apply the local maximum filter; all pixel of maximal value
-    # in their neighborhood are set to 1
-    local_max = maximum_filter(array, footprint=neighborhood) == array
-    # local_max is a mask that contains the peaks we are
-    # looking for, but also the background.
-    # In order to isolate the peaks we must remove
-    # the background from the mask.
+    print('It tries to fit. Please be pation and make yourself a tea :3')
 
-    # we create the mask of the background
-    background = (array == 0)
+    histo.Fit('fit_function', "R")  # fit within specified range
+    histo.Draw()
 
-    # a little technicality: we must erode the background in order to
-    # successfully subtract it form local_max, otherwise a line will
-    # appear along the background border
-    # (artifact of the local maximum filter)
-    eroded_background = binary_erosion(background, structure=neighborhood,
-                                       border_value=1)
+    input('Pause. Enter a digit to exit')
 
-    # we obtain the final mask, containing only peaks,
-    # by removing the background from the local_max mask (xor operation)
-    result = local_max ^ eroded_background
 
-    return result
+def position(apv_id, apv_channel):
+    '''
+    Input: APV's id and channel
+    Output:Tuple (sector, pad, layer): APV position in the detector
+    Does: Read mapping array. Returns pad id and sector position of APV.
+    Schematicaly pad ids and sectors numbering you can see in variables.py.
+    '''
+    # APV_id: odd - slave, even - master
+    if apv_id < 4:
+        if apv_id % 2 == 1:
+            map_name = 'tb15_slave'
+        else:
+            map_name = 'tb15_master'
+    elif apv_id >= 4 and apv_id < 14:
+        if apv_id % 2 == 1:
+            map_name = 'tb16_slave_divider'
+        else:
+            map_name = 'tb16_master_divider'
+    elif apv_id == 14:
+        map_name = 'tb16_master_tab_divider'
+    elif apv_id == 15:
+        map_name = 'tb16_slave_tab_divider'
+
+    # Calculate corresponded position
+    layer = apv_id//2
+    # Case of -1 trace separetly. Because it caused a bug which is hard to find!!!
+    # In C++ modulo "%" is different for negative numbers.
+    # In python -1%64 result in 63. NOT -1 as expercted
+    sector = apv_maps[map_name][apv_channel]//64
+    pad = apv_maps[map_name][apv_channel] % 64
+
+    return sector, pad, layer
+
+
+def calib_energy(apv_id, apv_signal):
+    '''
+    Input:APV's id and signal(fit of RC-CR function) in MIPs.
+    Output:Energy deposited in the layer
+    Does: Reads calibration data files. Creates TGraphError with this data.
+    Returns interpolated energy value - apv_energy
+    '''
+
+    # Calibration only to 1450 signal. No extrapolation. Just cut
+    signal_treshold = 1450.
+    cal_path = calib_path
+    cal_file_name = calib_file_names[apv_id]
+
+    # First point of callibraion curve
+    x = [0.]
+    y = [0.*16.5*1.164]
+    x_err = [1.e-5]
+    y_err = [1.e-5*16.5*1.164]
+
+    # Calibration data in file written as (x,y,x_err,y_err) for each APV_id
+    with open('%(cal_path)s%(cal_file_name)s' % locals(), 'r') as file:
+        for line in islice(file, 1, None):
+            # Calibration x-y data is inverted
+            # Normalization D/MC according to L2 *1.09# /4.3 divide when No CD
+            # *16.5*1.164 - is needed in order to get energy in MIPs.
+            x.append(float(line.split('  ')[1]))
+            y.append(float(line.split('  ')[0])*16.5*1.164)
+            x_err.append(float(line.split('  ')[3]))
+            y_err.append(float(line.split('  ')[2])*16.5*1.164)
+
+    x = np.array(x)
+    y = np.array(y)
+    x_err = np.array(x_err)
+    y_err = np.array(y_err)
+
+    graph = TGraphErrors(len(x), x, y, x_err, y_err)
+
+    # Take into account threshold
+    if apv_signal > signal_treshold:
+        signal = signal_treshold
+    else:
+        signal = apv_signal
+
+    return graph.Eval(signal)
