@@ -30,24 +30,30 @@ histos_1d = [  # N clusters
              ('Tr2Cluster2Pad', 'Tracker2 cluster2;Pad;N_{ev}', 64, 0, 64),
              ('Tr2Cluster2NPads', 'Tracker2 cluster2;N_{pads};N_{ev}', 8, 0, 8),
              # Residuals of clusters in trackers
-             ('Tr1Cluster1Residuals', 'Tracker1 cluster1;d_{clst_fit};N_{ev}', 128, -64, 64),
-             ('Tr1Cluster2Residuals', 'Tracker1 cluster2;d_{clst_fit};N_{ev}', 128, -64, 64),
-             ('Tr2Cluster1Residuals', 'Tracker2 cluster1;d_{clst_fit};N_{ev}', 128, -64, 64),
-             ('Tr2Cluster2Residuals', 'Tracker2 cluster2;d_{clst_fit};N_{ev}', 128, -64, 64),
+             ('Tr1Cluster1Residuals', 'Tracker1 cluster1;d_{clst_fit};N_{ev}', 300, -35, 25),
+             ('Tr1Cluster2Residuals', 'Tracker1 cluster2;d_{clst_fit};N_{ev}', 300, -35, 25),
+             ('Tr1HitsResiduals', 'Tracker1 hits;d_{hit_fit};N_{ev}', 300, -35, 25),
+             ('Tr2Cluster1Residuals', 'Tracker2 cluster1;d_{clst_fit};N_{ev}', 300, -35, 25),
+             ('Tr2Cluster1OnlyResiduals', 'Tracker2 cluster1;d_{clst_fit};N_{ev}', 300, -35, 25),
+             ('Tr2Cluster2Residuals', 'Tracker2 cluster2;d_{clst_fit};N_{ev}', 300, -35, 25),
+             ('Tr2HitsResiduals', 'Tracker2 hits;d_{hit_fit};N_{ev}', 300, -35, 25),
              # Distance between cluster1 and cluster2 in trackers
              ('Tr1Clst1Clst2Distance', 'Tracker1 clusters:1-2;d_{12};N_{ev}', 128, -64, 64),
              ('Tr2Clst1Clst2Distance', 'Tracker2 clusters:1-2;d_{12};N_{ev}', 128, -64, 64),
+             ('Tr2Par1Track', 'Fit of track ;par 1;N_{ev}', 200, -1, 1),
+             ('Tr2Par0Track', 'Fit of track ;par 0;N_{ev}', 50, 40, 50),
              # Energy ratio between cluster1 and cluster2 in trackers
-             ('Tr1Clst1Clst2ERatio', 'Tracker1 clusters:1-2;E_{2/1} ratio;N_{ev}', 200, 0, 2),
-             ('Tr2Clst1Clst2ERatio', 'Tracker2 clusters:1-2;E_{2/1} ratio;N_{ev}', 200, 0, 2)
+             #('Tr1Clst1Clst2ERatio', 'Tracker1 clusters:1-2;E_{2/1} ratio;N_{ev}', 200, 0, 2),
+             #('Tr2Clst1Clst2ERatio', 'Tracker2 clusters:1-2;E_{2/1} ratio;N_{ev}', 200, 0, 2)
             ]
 
 histos_2d = [  # Clusters Energy vs residual in trackers
-             ('Tr1EResiduals', 'Tracker1;d_{clst_fit};E, [MIP]', 128, -64, 64, 100, 0, 10),
-             ('Tr2EResiduals', 'Tracker2;d_{clst_fit};E, [MIP]', 128, -64, 64, 100, 0, 10),
+             #('Tr1EResiduals', 'Tracker1;d_{clst_fit};E, [MIP]', 128, -64, 64, 100, 0, 10),
+             #('Tr2EResiduals', 'Tracker2;d_{clst_fit};E, [MIP]', 128, -64, 64, 100, 0, 10),
              # Clusters energy ratio vs distance in trackers
-             ('Tr1Clst1Clst2ERatioDistance', 'Tracker1 clusters 1-2;d_{12};E_{2/1} ratio', 128, -64, 64, 200, 0, 2),
-             ('Tr2Clst1Clst2ERatioDistance', 'Tracker2 clusters 1-2;d_{12};E_{2/1} ratio', 128, -64, 64, 200, 0, 2)
+             ('Tr2Clst1Clst2Pos', 'Tracker2 clusters 1-2;Pad cluster1;Pad cluster2', 64, 0, 64, 64, 0, 64),
+             #('Tr1Clst1Clst2ERatioDistance', 'Tracker1 clusters 1-2;d_{12};E_{2/1} ratio', 128, -64, 64, 200, 0, 2),
+             #('Tr2Clst1Clst2ERatioDistance', 'Tracker2 clusters 1-2;d_{12};E_{2/1} ratio', 128, -64, 64, 200, 0, 2)
             ]
 
 
@@ -61,4 +67,5 @@ def histo_creator(list_1d, list_2d):
         h_dict[name] = TH2F(name, title, n_xbins, x_min, x_max, n_ybins, y_min, y_max)
     return h_dict
 
+# Ignore PEP8. h_dict is imported in the main.py file
 h_dict = histo_creator(histos_1d, histos_2d)

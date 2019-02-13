@@ -13,8 +13,9 @@ Distance between clusters/etc. distributions
 5) Plot energy distribution in the trackets and fit it with Landau-Gaus convolution function. (BROKEN IN THE MOMENT)
 '''
 
-from ROOT import TFile, gROOT
+from ROOT import TFile, gROOT, TGraphErrors
 import time
+import numpy as np
 
 from detector import Calorimeter, Tracker
 from signal import extract_signal
@@ -28,37 +29,38 @@ start_time = time.time()
 gROOT.SetBatch(1)
 
 
-# Extraction
-def coincidence_analysis(self):
-    shower_pad, shower_sector = self.clusters_calorimeter[0].pad, self.clusters_calorimeter[0].sector
+class Efficiency:
+    def __init__(self):
+        self.x = np.arange(0, 12, 0.05)
+        self.tr1_eff = np.zeros_like(self.x)
+        self.tr2_eff = np.zeros_like(self.x)
+        self.system_eff = np.zeros_like(self.x)
+        self.map_of_events = np.zeros((3, 3))
 
-    for tr1_cluster in self.clusters_tracker1:
-        if shower_pad-1 < tr1_cluster.pad < shower_pad+1:
-            self.n_events_tr1_cal_match += 1
-            for tr2_cluster in self.clusters_tracker2:
-                if shower_pad-1 < tr2_cluster.pad < shower_pad+1:
-                    self.n_events_all_match += 1
-                    break
-            else:
-                return 0
-            break
-    else:
-        return 0
-    if len(self.clusters_tracker1) == 1 and len(self.clusters_tracker2) == 1:
-        self.n_events_only_shower_match += 1
-        return 0
-    return 1
+
+def track_fit(tr1_hit, tr2_hit, cal_hit):
+    x = np.array([1., 26.])
+    y = np.array([tr1_hit, cal_hit])
+    track = TGraphErrors(2, x, y)
+    track.Fit('pol1', "Q")
+    fit_func = track.GetFunction('pol1')
+    # Return residuals
+    #print('p0', fit_func.GetParameter(0))
+    #print('p1', fit_func.GetParameter(1))
+
+    return (tr2_hit - fit_func.Eval(6.)), fit_func.GetParameter(0), fit_func.GetParameter(1)
 
 
 def main():
 
-    filename = './trees/run741_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root'
-    file = TFile.Open(filename)
+    file = TFile.Open('./trees/run741_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root')
     tree = file.apv_reco
-
     n_events = tree.GetEntries()
+
+    efficiency = Efficiency()
     passed_cuts = 0
-    have_signal_in_cal = 0
+    have_only_1_cluster_in_cal = 0
+    have_only_1_cluster_in_tr1 = 0
 
     for idx, event in enumerate(tree):
         # For debuging. If you need to loop not over all events
@@ -87,23 +89,32 @@ def main():
         clusters_calorimeter = clustering_in_towers(signals_calorimeter, merge='on')
         clusters_tracker1 = clustering_in_towers(signals_tracker1, merge='off')
         clusters_tracker2 = clustering_in_towers(signals_tracker2, merge='off')
-        if not clusters_calorimeter:
-            continue
-        have_signal_in_cal += 1
 
+        if len(clusters_calorimeter) != 1:
+            continue
+        have_only_1_cluster_in_cal += 1
+
+        if len(clusters_tracker1) != 1:
+            continue
+        have_only_1_cluster_in_tr1 += 1
+
+        if len(clusters_tracker2) == 0:
+            continue
         calorimeter = Calorimeter(signals_calorimeter, clusters_calorimeter)
         tracker1 = Tracker(signals_tracker1, clusters_tracker1)
         tracker2 = Tracker(signals_tracker2, clusters_tracker2)
 
+        tracker2.track_par0_fit = track_fit(clusters_tracker1[0].pad, clusters_tracker2[0].pad, clusters_calorimeter[0].pad)[1]
+        tracker2.track_par1_fit = track_fit(clusters_tracker1[0].pad, clusters_tracker2[0].pad, clusters_calorimeter[0].pad)[2]
+
+        for cluster in range(min(tracker2.n_clusters(), 2)):
+            tracker2.residuals[cluster] = track_fit(clusters_tracker1[0].pad, clusters_tracker2[cluster].pad, clusters_calorimeter[0].pad)[0]
+        for hit in signals_tracker2:
+            tracker2.residual_hits.append(track_fit(clusters_tracker1[0].pad, hit.pad, clusters_calorimeter[0].pad)[0])
+
         calorimeter.fill_histos(h_dict)
         tracker1.fill_histos(h_dict, 'Tr1')
         tracker2.fill_histos(h_dict, 'Tr2')
-
-        #check_match = Analizer.coincidence_analysis()
-        #if check_match == 0:
-        #    continue
-
-        # Analize only events with 1 cluster
 
     # Update/create output file, where to write all histograms
     output_file = TFile('./Analysis/RENAME.root', 'update')
@@ -111,6 +122,9 @@ def main():
     # Write all histograms to the output root file
     for name in h_dict:
         h_dict[name].Write()
+
+    print(have_only_1_cluster_in_cal/n_events, 'Events have ONLY 1 signal in cal:', have_only_1_cluster_in_cal)
+    print(have_only_1_cluster_in_tr1/n_events, 'Events have ONLY 1 signal in tr1:', have_only_1_cluster_in_tr1)
 
     # Print Hooraay text
     input('Yaay I am finished :3')

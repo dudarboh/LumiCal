@@ -187,8 +187,8 @@ def langaus_fit(h_name):
 
     print('It tries to fit. Please be pation and make yourself a tea :3')
 
-    histo.Fit('fit_function', "R")  # fit within specified range
-    histo.Draw()
+    fit_function.Fit('fit_function', "R")  # fit within specified range
+    fit_function.Draw()
 
     input('Pause. Enter a digit to exit')
 

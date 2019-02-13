@@ -1,3 +1,5 @@
+import numpy as np
+
 
 class Cluster:
     '''
@@ -15,28 +17,40 @@ class Cluster:
     Sum energy and number of pads. Calculate new weighted average position.
     Do nothing with cluster2. Should be deleted in the code!
     '''
-    def __init__(self, data, cluster):
-        self.energy = self.get_energy(data, cluster)
+    def __init__(self, signals, cluster, weights='Energy'):
+        self.signals = signals
+        self.cluster = cluster
 
-        self.pad = self.get_position('pad', data, cluster)
-        self.sector = self.get_position('sector', data, cluster)
-        self.x = self.get_position('x', data, cluster)
-        self.y = self.get_position('y', data, cluster)
-        self.n_pads = self.get_n_pads(data, cluster)
+        self.energy = self.get_energy()
 
-    def get_energy(self, data, cluster):
-        return sum([signal.energy for signal in data if signal.cluster == cluster])
+        self.pad = self.get_position('pad', weights=weights)
+        self.sector = self.get_position('sector', weights=weights)
 
-    def get_position(self, position, data, cluster):
+        self.x = self.get_position('x', weights=weights)
+        self.y = self.get_position('y', weights=weights)
+
+        self.n_pads = self.get_n_pads()
+
+    def get_energy(self):
+        return sum([signal.energy for signal in self.signals if signal.cluster == self.cluster])
+
+    def get_position(self, pos_string, weights='Energy'):
         '''Calculate position as sum with weights(energies) over all points'''
-        pos = 0
-        pos_energy_list = [(getattr(signal, position), signal.energy) for signal in data if signal.cluster == cluster]
-        for pos_energy in pos_energy_list:
-            pos += pos_energy[0]*pos_energy[1]/self.energy
-        return pos
+        position = 0
+        if weights == 'Energy':
+            weights_list = [signal.energy for signal in self.signals if signal.cluster == self.cluster]
 
-    def get_n_pads(self, data, cluster):
-        return len([signal for signal in data if signal.cluster == cluster])
+        elif weights == 'logW':
+            w0 = 3.4
+            weights_list = [max(0, w0+np.log(signal.energy/self.energy)) for signal in self.signals if signal.cluster == self.cluster]
+
+        positions_list = [getattr(signal, pos_string) for signal in self.signals if signal.cluster == self.cluster]
+
+        position = sum([positions_list[idx]*weight/sum(weights_list) for idx, weight in enumerate(weights_list)])
+        return position
+
+    def get_n_pads(self):
+        return len([signal for signal in self.signals if signal.cluster == self.cluster])
 
     def merge(self, cluster2):
             merged_energy = self.energy+cluster2.energy
@@ -46,6 +60,9 @@ class Cluster:
             self.y = (self.y*self.energy+cluster2.y*cluster2.energy)/merged_energy
             self.n_pads = self.n_pads + cluster2.n_pads
             self.energy = merged_energy
+
+    def match_shower(self, x, shower_cluster):
+        return self.pad - shower_cluster.pad < x
 
 
 def clustering_in_towers(signals_list,  merge='on'):
@@ -69,7 +86,7 @@ def clustering_in_towers(signals_list,  merge='on'):
     n_clusters = max([signal.cluster for signal in signals_list])+1
     # Add cluster objects to the list.
     for cluster in range(n_clusters):
-        clusters_list.append(Cluster(signals_list, cluster))
+        clusters_list.append(Cluster(signals_list, cluster, weights='logW'))
 
     # If merge clusters option is on: merge clusters
     if merge == 'on':
@@ -115,7 +132,7 @@ def set_clusters(signals_list):
     '''
 
     cluster_idx = 0
-    # For signal in data list
+    # For signal in signals list
     for signal in signals_list:
         # If the neighbor of signal1 is signal1 itself. (This means it is a local maximum)
         # Mark it as a seed (give it cluster_index = 0, 1, 2, ...)
@@ -128,7 +145,7 @@ def set_clusters(signals_list):
     # Stop when all signals got some cluster_index
     while n_non_clusters != 0:
         n_non_clusters = 0
-        # for signal in data list
+        # for signal in signals list
         for signal in signals_list:
             # If signal is not in a cluster: +1 to non_cluster counter
             # If the highest energetic neighbor of signal is in cluster

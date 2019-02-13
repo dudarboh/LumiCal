@@ -86,9 +86,76 @@ def extract_signal(event):
 
         # If signal with this position already in the list: just add energy
         # Else: Add this signal to list and add energy
-        for item in data_list:
-            if (item.sector, item.pad) == (sector, pad):
-                item.energy += energy
+        for existed in data_list:
+            if (existed.sector, existed.pad) == (sector, pad):
+                existed.energy += energy
+                break
+        else:
+            data_list.append(Signal(sector, pad, energy))
+
+    # If no signals in calorimeter - skip event
+    # if len(signals_calorimeter) == 0:
+    #    return False
+
+    # Sort signals by energy
+    signals_calorimeter = sorted(signals_calorimeter, key=lambda x: x.energy, reverse=True)
+    signals_tracker1 = sorted(signals_tracker1, key=lambda x: x.energy, reverse=True)
+    signals_tracker2 = sorted(signals_tracker2, key=lambda x: x.energy, reverse=True)
+
+    # If everything is ok
+    return signals_tracker1, signals_tracker2, signals_calorimeter
+
+
+def extract_mc(event):
+    '''
+    Write something clever here.
+    '''
+    mev2mip = 1./0.0885/9.17112e-01
+
+    # Read needed branches from the input ROOT file.
+    id_cell = event.Hits.cellID
+    eHit = event.Hits.eHit
+
+    # Lists for signals
+    signals_calorimeter = []
+    signals_tracker1 = []
+    signals_tracker2 = []
+
+    # Loop through all signals(hits) in the event
+    for hit in id_cell:
+        pad = hit & 0xff  # cell number in sector, rCell
+        sector = (hit >> 8) & 0xff  # sector number, phiCell
+        layer = (hit >> 16) & 0xff  # layer number
+
+        layer -= 1  # it starts from 1, not from 0
+        sector -= 11  # it starts from 1, not from 11
+
+        energy = eHit * mev2mip
+
+        # Calculate position
+        if (sector == 0 or sector == 3 or layer == 7
+           or (sector == 1 and pad < 20)
+           or (sector == 2 and pad < 20)
+           or sector < 0):
+            continue
+
+        # Ignore noisy cells in calorimeter
+        if layer >= 2 and (energy < 1.4):
+            continue
+
+        # Choose what is data_list(tracker1/2,calorimeter)
+        if layer == 0:
+            data_list = signals_tracker1
+        elif layer == 1:
+            data_list = signals_tracker2
+        else:
+            data_list = signals_calorimeter
+
+        # If signal with this position already in the list: just add energy
+        # Else: Add this signal to list and add energy
+        for existed in data_list:
+            if (existed.sector, existed.pad) == (sector, pad):
+                existed.energy += energy
                 break
         else:
             data_list.append(Signal(sector, pad, energy))
