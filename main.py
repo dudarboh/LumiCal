@@ -1,134 +1,227 @@
-'''
-This script was written to analise data of the LumiCal test beam runs of 2016.
-It's input - root files with signals and apvs' information provided by
-Sasha's Borisov readout system.
-Script has been tested with: root v6.14/06 and python 3.7.2.
-Time needed is ~20 minutes for 55000 events. (AT MY OLD LAPTOP!)
-Script can do the following:
-1)Show 2d map of signals distribution in the event
-2)Do clustering of signals in calorimeter using "linking neighbors" algorithm.
-3)Calculate and plot various distributions: Number of clusters/Energy/Position/
-Distance between clusters/etc. distributions
-4) Show 2d map of signals in the both trackers plane.
-5) Plot energy distribution in the trackets and fit it with Landau-Gaus convolution function. (BROKEN IN THE MOMENT)
-'''
-
-from ROOT import TFile, gROOT, TGraphErrors
-import time
+from ROOT import TFile, gROOT, TGraphErrors, TH1F
 import numpy as np
-
-from detector import Calorimeter, Tracker
-from signal import extract_signal
-from cluster import clustering_in_towers
-from histos import h_dict
-
-# To measure time of execution
-start_time = time.time()
-
-# Dont draw pictures in the end
-gROOT.SetBatch(1)
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 
-class Efficiency:
-    def __init__(self):
-        self.x = np.arange(0, 12, 0.05)
-        self.tr1_eff = np.zeros_like(self.x)
-        self.tr2_eff = np.zeros_like(self.x)
-        self.system_eff = np.zeros_like(self.x)
-        self.map_of_events = np.zeros((3, 3))
+def residuals_111_before_alignment(input_file, output_file):
+    '''
+    Mean of residuals before misalignment:
+    Tr1: -0.1897
+    Tr2: 0.9405
+    Cal: -0.7501
+    '''
+    tree = input_file.data
+    tr1_z = 0.
+    tr2_z = 5 * 4.5
+    cal_z = 25 * 4.5
+    x = np.array([tr1_z, tr2_z, cal_z])
+    h_tr1_res = TH1F('h_tr1_res111', 'Tracker1 residuals', 200, -20, 20)
+    h_tr2_res = TH1F('h_tr2_res111', 'Tracker2 residuals', 200, -20, 20)
+    h_cal_res = TH1F('h_cal_res111', 'Calorimeter residuals', 200, -20, 20)
+
+    for event in tree:
+        if (event.tr1_n_clusters == 1 and event.tr2_n_clusters == 1 and event.cal_n_clusters == 1
+           and 153.1 < event.cal_cluster_pad[0] * 1.8 + 0.9 + 80. < 172.3):
+            y = np.array([event.tr1_cluster_pad[0] * 1.8 + 0.9 + 80., event.tr2_cluster_pad[0] * 1.8 + 0.9 + 80., event.cal_cluster_pad[0] * 1.8 + 0.9 + 80.])
+            x_err = np.array([4.5 / 2, 4.5 / 2, 13.5])
+            y_err = np.array([0.9, 0.9, 0.9])
+            track = TGraphErrors(3, x, y, x_err, y_err)
+            track.Fit('pol0', "Q")
+            fit_func = track.GetFunction('pol0')
+
+            tr1_residual = event.tr1_cluster_pad[0] * 1.8 + 0.9 + 80. - fit_func.Eval(tr1_z)
+            tr2_residual = event.tr2_cluster_pad[0] * 1.8 + 0.9 + 80. - fit_func.Eval(tr2_z)
+            cal_residual = event.cal_cluster_pad[0] * 1.8 + 0.9 + 80. - fit_func.Eval(cal_z)
+            h_tr1_res.Fill(tr1_residual)
+            h_tr2_res.Fill(tr2_residual)
+            h_cal_res.Fill(cal_residual)
+
+    output_file.cd()
+    h_tr1_res.Write()
+    h_tr2_res.Write()
+    h_cal_res.Write()
 
 
-def track_fit(tr1_hit, tr2_hit, cal_hit):
-    x = np.array([1., 26.])
-    y = np.array([tr1_hit, cal_hit])
-    track = TGraphErrors(2, x, y)
-    track.Fit('pol1', "Q")
-    fit_func = track.GetFunction('pol1')
-    # Return residuals
-    #print('p0', fit_func.GetParameter(0))
-    #print('p1', fit_func.GetParameter(1))
+def residuals_111_2points(input_file, output_file):
+    tree = input_file.data
+    tr1_z = 0.
+    tr2_z = 5 * 4.5
+    cal_z = 25 * 4.5
+    x = np.array([tr1_z, cal_z])
+    h_tr2_res = TH1F('h_tr2_res111_2points', 'Tracker2 residuals', 100, -10, 10)
 
-    return (tr2_hit - fit_func.Eval(6.)), fit_func.GetParameter(0), fit_func.GetParameter(1)
+    for event in tree:
+        if (event.tr1_n_clusters == 1 and event.tr2_n_clusters == 1 and event.cal_n_clusters == 1
+           and 153.1 < event.cal_cluster_rho[0] < 172.3):
+            y = np.array([event.tr1_cluster_rho[0], event.cal_cluster_rho[0]])
+            x_err = np.array([4.5 / 2, 13.5])
+            y_err = np.array([0.9, 0.9])
+            track = TGraphErrors(2, x, y, x_err, y_err)
+            track.Fit('pol1', "Q")
+            fit_func = track.GetFunction('pol1')
+            tr2_residual = event.tr2_cluster_rho[0] - fit_func.Eval(tr2_z)
+            h_tr2_res.Fill(tr2_residual)
+
+    output_file.cd()
+    h_tr2_res.Write()
+
+
+def residuals_111_cluster(input_file, output_file):
+    tree = input_file.data
+
+    h_tr1_res = TH1F('h_tr1_res111_cluster', 'Tracker1 residuals cluster', 200, -20, 20)
+    h_tr2_res = TH1F('h_tr2_res111_cluster', 'Tracker2 residuals cluster', 200, -20, 20)
+
+    for event in tree:
+        if (event.tr1_n_clusters == 1 and event.tr2_n_clusters == 1 and event.cal_n_clusters == 1
+           and 153.1 < event.cal_cluster_rho[0] < 172.3):
+
+            tr1_residual = event.tr1_cluster_rho[0] - event.cal_cluster_rho[0]
+            tr2_residual = event.tr2_cluster_rho[0] - event.cal_cluster_rho[0]
+            h_tr1_res.Fill(tr1_residual)
+            h_tr2_res.Fill(tr2_residual)
+
+    output_file.cd()
+    h_tr1_res.Write()
+    h_tr2_res.Write()
+
+
+def plot_backscattered_tracks(input_file):
+    tree = input_file.data
+    fig = plt.figure()
+    ax = fig.gca(projection='3d')
+
+    idx = 0
+    for event in tree:
+        if (event.tr1_n_clusters == 2 and event.tr2_n_clusters == 2 and event.cal_n_clusters == 1
+           and 153.1 < event.cal_cluster_rho[0] < 172.3):
+            x = np.linspace(0, 135, 31)
+
+            y0 = event.tr1_cluster_x[1]
+            ky = (event.tr2_cluster_x[1] - y0) / 22.5  # mm
+            y = y0 + x * ky
+
+            z0 = event.tr1_cluster_y[1]
+            kz = (event.tr2_cluster_y[1] - z0) / 22.5  # mm
+            z = z0 + x * kz
+
+            ax.plot(x, y, z)
+            idx += 1
+            if idx == 30:
+                break
+    ax.set_xlim(0, 135)
+    ax.set_ylim(-51, 51)
+    ax.set_zlim(153, 173)
+    ax.set_xlabel('z (layer), mm')
+    ax.set_ylabel('x (sector), mm')
+    ax.set_zlabel('y (pad), mm')
+    plt.show()
+
+
+def tr2_efficiency(input_file):
+    tree = input_file.data
+    eff = 0
+    eff_tot = 0
+    for event in tree:
+        if (event.tr1_n_clusters == 1 and event.cal_n_clusters == 1
+           and 153.1 < event.cal_cluster_rho[0] < 172.3
+           and -2 < event.tr1_cluster_rho[0] - event.cal_cluster_rho[0] < 2):
+            eff_tot += 1
+            if event.tr2_n_clusters >= 1 and -2 < event.tr2_cluster_rho[0] - event.cal_cluster_rho[0] < 2:
+                eff += 1
+            elif event.tr2_n_clusters >= 2 and -2 < event.tr2_cluster_rho[1] - event.cal_cluster_rho[0] < 2:
+                print('WATAFAAACK??')
+
+    print('Efficiency of Tracker2:', eff / eff_tot)
+
+
+def tr1_efficiency(input_file):
+    tree = input_file.data
+    eff = 0
+    eff_tot = 0
+    for event in tree:
+        if (event.tr2_n_clusters == 1 and event.cal_n_clusters == 1
+           and 153.1 < event.cal_cluster_rho[0] < 172.3
+           and -2 < event.tr2_cluster_rho[0] - event.cal_cluster_rho[0] < 2):
+            eff_tot += 1
+
+            if event.tr1_n_clusters >= 1 and -2 < event.tr1_cluster_rho[0] - event.cal_cluster_rho[0] < 2:
+                eff += 1
+            elif event.tr1_n_clusters >= 2 and -2 < event.tr1_cluster_rho[1] - event.cal_cluster_rho[0] < 2:
+                print('WATAFAAACK??')
+
+    print('Efficiency of Tracker1:', eff / eff_tot)
+
+
+def merge_pos_change(input_merged_file, input_not_merged_file, output_file):
+    tree_merged = input_merged_file.data
+    tree_not_merged = input_not_merged_file.data
+
+    h_pos_shift = TH1F('h_pos_shift', 'Merge shift position', 100, -10, 10)
+
+    merged_pos = np.array([])
+    not_merged_pos = np.array([])
+
+    print('I am here 1')
+    for event1 in tree_merged:
+        if event1.cal_n_clusters >= 1:
+            merged_pos = np.append(merged_pos, event1.cal_cluster_y[0])
+
+    print('I am here 2')
+    for event2 in tree_not_merged:
+        if event2.cal_n_clusters >= 1:
+            not_merged_pos = np.append(not_merged_pos, event2.cal_cluster_y[0])
+
+    print('I am here 3')
+    for idx, pos in enumerate(merged_pos):
+        h_pos_shift.Fill(not_merged_pos[idx] - pos)
+
+    output_file.cd()
+    h_pos_shift.Write()
 
 
 def main():
 
-    file = TFile.Open('./trees/run741_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root')
-    tree = file.apv_reco
-    n_events = tree.GetEntries()
+    file_merged = TFile.Open('./extracted_data_merged.root')
+    file_not_merged = TFile.Open('./extracted_data_not_merged.root')
+    tree = file_merged.data
 
-    efficiency = Efficiency()
-    passed_cuts = 0
-    have_only_1_cluster_in_cal = 0
-    have_only_1_cluster_in_tr1 = 0
+    output_file = TFile('RENAME.root', 'recreate')
 
-    for idx, event in enumerate(tree):
-        # For debuging. If you need to loop not over all events
-        # if idx == 200:
-        #    break
+    # plot_backscattered_tracks(file_merged)
 
-        # Printout to see how many events are proceded/left.
-        # And how much time spend per event.
-        if idx % (500) == 0:
-            time_min = (time.time()-start_time) // 60
-            time_sec = (time.time()-start_time) % 60
-            print('%(idx)i/%(n_events)i events' % locals(), end=' ')
-            print('%(time_min)i min' % locals(), end=' ')
-            print('%(time_sec)i sec' % locals())
+    residuals_111_before_alignment(file_merged, output_file)
+    # residuals_111_cluster(file_merged, output_file)
+    # residuals_111_2points(file_merged, output_file)
 
-        # Extract data.
-        signals = extract_signal(event)
-        # If no hits in calorimeter - skip event
-        if not signals:
-            continue
-        signals_tracker1, signals_tracker2, signals_calorimeter = signals
+    # tr1_efficiency(file_merged)
+    # tr2_efficiency(file_merged)
 
-        passed_cuts += 1
+    # merge_pos_change(file_merged, file_not_merged, output_file)
 
-        # Do clustering to signals with merging
-        clusters_calorimeter = clustering_in_towers(signals_calorimeter, merge='on')
-        clusters_tracker1 = clustering_in_towers(signals_tracker1, merge='off')
-        clusters_tracker2 = clustering_in_towers(signals_tracker2, merge='off')
+    tree.Draw('cal_cluster_energy[0]>>h_cal_energy', 'cal_n_clusters == 1 && 153.1 < cal_cluster_rho[0] && cal_cluster_rho[0] < 172.3')
+    h_cal_energy = gROOT.FindObject('h_cal_energy')
+    h_cal_energy.Write()
 
-        if len(clusters_calorimeter) != 1:
-            continue
-        have_only_1_cluster_in_cal += 1
+    tree.Draw('cal_cluster_rho[0]>>h_cal_rho', 'cal_n_clusters == 1 && 153.1 < cal_cluster_rho[0] && cal_cluster_rho[0] < 172.3')
+    h_cal_rho = gROOT.FindObject('h_cal_rho')
+    h_cal_rho.Write()
 
-        if len(clusters_tracker1) != 1:
-            continue
-        have_only_1_cluster_in_tr1 += 1
-
-        if len(clusters_tracker2) == 0:
-            continue
-        calorimeter = Calorimeter(signals_calorimeter, clusters_calorimeter)
-        tracker1 = Tracker(signals_tracker1, clusters_tracker1)
-        tracker2 = Tracker(signals_tracker2, clusters_tracker2)
-
-        tracker2.track_par0_fit = track_fit(clusters_tracker1[0].pad, clusters_tracker2[0].pad, clusters_calorimeter[0].pad)[1]
-        tracker2.track_par1_fit = track_fit(clusters_tracker1[0].pad, clusters_tracker2[0].pad, clusters_calorimeter[0].pad)[2]
-
-        for cluster in range(min(tracker2.n_clusters(), 2)):
-            tracker2.residuals[cluster] = track_fit(clusters_tracker1[0].pad, clusters_tracker2[cluster].pad, clusters_calorimeter[0].pad)[0]
-        for hit in signals_tracker2:
-            tracker2.residual_hits.append(track_fit(clusters_tracker1[0].pad, hit.pad, clusters_calorimeter[0].pad)[0])
-
-        calorimeter.fill_histos(h_dict)
-        tracker1.fill_histos(h_dict, 'Tr1')
-        tracker2.fill_histos(h_dict, 'Tr2')
-
-    # Update/create output file, where to write all histograms
-    output_file = TFile('./Analysis/RENAME.root', 'update')
-
-    # Write all histograms to the output root file
-    for name in h_dict:
-        h_dict[name].Write()
-
-    print(have_only_1_cluster_in_cal/n_events, 'Events have ONLY 1 signal in cal:', have_only_1_cluster_in_cal)
-    print(have_only_1_cluster_in_tr1/n_events, 'Events have ONLY 1 signal in tr1:', have_only_1_cluster_in_tr1)
-
-    # Print Hooraay text
     input('Yaay I am finished :3')
 
 
-# I believe It is faster if main code is written inside main().
+gROOT.SetBatch(1)
+
 main()
+
+'''
+TO DO LIST:
+1)Change alignment!
+2) Plot residuals to the 3 point fit
+3) Calculate efficiency of Tr2 as distance to
+3.1) pol0 fit line through 2 points
+3.2) distance to the cluster in calorimeter
+4) The same way around the eff for Tr1.
+5) Scatter plot of fitted trackes to calorimeter
+'''
