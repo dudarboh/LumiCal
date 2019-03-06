@@ -84,7 +84,7 @@ def extract_mc(event):
 
         hit = HitMC(cell_id, energy)
 
-        if (hit.sector == 0 or hit.sector == 3 or layer == 7
+        if (hit.sector == 0 or hit.sector == 3 or hit.layer == 7
            or (hit.sector == 1 and hit.pad < 20)
            or (hit.sector == 2 and hit.pad < 20)
            or (hit.layer >= 2 and hit.energy < 1.4)):
@@ -105,7 +105,7 @@ def extract_towers(hits):
     towers = []
     for pos in towers_pos:
         tower_hits = [hit for hit in hits if (hit.sector, hit.pad) == pos]
-        towers.append(Tower(tower_hits, 'data'))
+        towers.append(Tower(tower_hits))
     return towers
 
 
@@ -133,7 +133,7 @@ def main(data_type):
     tr1_cluster_x = array.array('f', [0.0] * 256)
     tr1_cluster_y = array.array('f', [0.0] * 256)
     tr1_cluster_energy = array.array('f', [0.0] * 256)
-    tr1_cluster_n_pads = array.array('f', [0.0] * 256)
+    tr1_cluster_n_pads = array.array('i', [0] * 256)
 
     tr2_n_clusters = array.array('i', [0])
     tr2_cluster_pad = array.array('f', [0.0] * 256)
@@ -143,7 +143,7 @@ def main(data_type):
     tr2_cluster_x = array.array('f', [0.0] * 256)
     tr2_cluster_y = array.array('f', [0.0] * 256)
     tr2_cluster_energy = array.array('f', [0.0] * 256)
-    tr2_cluster_n_pads = array.array('f', [0.0] * 256)
+    tr2_cluster_n_pads = array.array('i', [0] * 256)
 
     cal_n_clusters = array.array('i', [0])
     cal_cluster_pad = array.array('f', [0.0] * 256)
@@ -153,7 +153,7 @@ def main(data_type):
     cal_cluster_x = array.array('f', [0.0] * 256)
     cal_cluster_y = array.array('f', [0.0] * 256)
     cal_cluster_energy = array.array('f', [0.0] * 256)
-    cal_cluster_n_pads = array.array('f', [0.0] * 256)
+    cal_cluster_n_pads = array.array('i', [0] * 256)
 
     output_tree.Branch('tr1_n_clusters', tr1_n_clusters, 'tr1_n_clusters/I')
     output_tree.Branch('tr1_cluster_pad', tr1_cluster_pad, 'tr1_cluster_pad[tr1_n_clusters]/F')
@@ -163,7 +163,7 @@ def main(data_type):
     output_tree.Branch('tr1_cluster_x', tr1_cluster_x, 'tr1_cluster_x[tr1_n_clusters]/F')
     output_tree.Branch('tr1_cluster_y', tr1_cluster_y, 'tr1_cluster_y[tr1_n_clusters]/F')
     output_tree.Branch('tr1_cluster_energy', tr1_cluster_energy, 'tr1_cluster_energy[tr1_n_clusters]/F')
-    output_tree.Branch('tr1_cluster_n_pads', tr1_cluster_n_pads, 'tr1_cluster_n_pads[tr1_n_clusters]/F')
+    output_tree.Branch('tr1_cluster_n_pads', tr1_cluster_n_pads, 'tr1_cluster_n_pads[tr1_n_clusters]/I')
 
     output_tree.Branch('tr2_n_clusters', tr2_n_clusters, 'tr2_n_clusters/I')
     output_tree.Branch('tr2_cluster_pad', tr2_cluster_pad, 'tr2_cluster_pad[tr2_n_clusters]/F')
@@ -173,7 +173,7 @@ def main(data_type):
     output_tree.Branch('tr2_cluster_x', tr2_cluster_x, 'tr2_cluster_x[tr2_n_clusters]/F')
     output_tree.Branch('tr2_cluster_y', tr2_cluster_y, 'tr2_cluster_y[tr2_n_clusters]/F')
     output_tree.Branch('tr2_cluster_energy', tr2_cluster_energy, 'tr2_cluster_energy[tr2_n_clusters]/F')
-    output_tree.Branch('tr2_cluster_n_pads', tr2_cluster_n_pads, 'tr2_cluster_n_pads[tr2_n_clusters]/F')
+    output_tree.Branch('tr2_cluster_n_pads', tr2_cluster_n_pads, 'tr2_cluster_n_pads[tr2_n_clusters]/I')
 
     output_tree.Branch('cal_n_clusters', cal_n_clusters, 'cal_n_clusters/I')
     output_tree.Branch('cal_cluster_pad', cal_cluster_pad, 'cal_cluster_pad[cal_n_clusters]/F')
@@ -183,7 +183,7 @@ def main(data_type):
     output_tree.Branch('cal_cluster_x', cal_cluster_x, 'cal_cluster_x[cal_n_clusters]/F')
     output_tree.Branch('cal_cluster_y', cal_cluster_y, 'cal_cluster_y[cal_n_clusters]/F')
     output_tree.Branch('cal_cluster_energy', cal_cluster_energy, 'cal_cluster_energy[cal_n_clusters]/F')
-    output_tree.Branch('cal_cluster_n_pads', cal_cluster_n_pads, 'cal_cluster_n_pads[cal_n_clusters]/F')
+    output_tree.Branch('cal_cluster_n_pads', cal_cluster_n_pads, 'cal_cluster_n_pads[cal_n_clusters]/I')
 
     if data_type == 'mc':
         tr1_true_hit_rho = array.array('f', [0])
@@ -206,8 +206,8 @@ def main(data_type):
         output_tree.Branch('cal_true_hit_y', cal_true_hit_y, 'cal_true_hit_y/F')
 
     for idx, event in enumerate(tree):
-        # if idx != 1999:
-        #     continue
+        if idx == 1999:
+            break
 
         if idx % (1000) == 0:
             time_min = (time.time() - start_time) // 60
@@ -220,7 +220,7 @@ def main(data_type):
         if data_type == 'data':
             hits_tr1, hits_tr2, hits_cal = extract_hits(event)
         elif data_type == 'mc':
-            signals_tr1, signals_tr2, signals_cal, true_hits = extract_mc(event)
+            hits_tr1, hits_tr2, hits_cal, true_hits = extract_mc(event)
             tr1_true_hit_x[0] = true_hits[0][0]
             tr1_true_hit_y[0] = true_hits[0][1]
             tr1_true_hit_rho[0] = true_hits[0][2]
@@ -282,4 +282,4 @@ def main(data_type):
     output_file.Close()
 
 
-main('data')
+main('mc')

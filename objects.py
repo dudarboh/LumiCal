@@ -197,7 +197,7 @@ class HitMC:
 
 
 class Tower:
-    def __init__(self, tower_hits, data_type):
+    def __init__(self, tower_hits):
         self.hits = tower_hits
 
         self.sector = self.hits[0].sector
@@ -317,7 +317,10 @@ def clustering(towers, merge, det):
 
     n_clusters = max([tower.cluster for tower in towers]) + 1
     for cluster in range(n_clusters):
-        cluster_hits = np.array([tower.hits for tower in towers if tower.cluster == cluster]).flatten()
+        cluster_hits = []
+        for tower in towers:
+            if tower.cluster == cluster:
+                cluster_hits.extend(tower.hits)
         clusters.append(Cluster(cluster_hits, det))
 
     if merge == 'on':
