@@ -237,6 +237,8 @@ class Cluster:
             return [hit.energy for hit in self.hits]
 
     def get_position(self, pos_string):
+        if sum(self.weights) == 0:
+            return -1
         positions = [getattr(hit, pos_string) for hit in self.hits]
         return sum([pos * self.weights[idx] / sum(self.weights) for idx, pos in enumerate(positions)])
 

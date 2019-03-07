@@ -109,18 +109,18 @@ def extract_towers(hits):
     return towers
 
 
-def main(data_type):
+def main(data_type, merge_type):
     start_time = time.time()
 
     if data_type == 'data':
         file = TFile.Open('./trees/run741_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root')
         tree = file.apv_reco
-        output_file = TFile('extracted_data_RENAME.root', 'recreate')
+        output_file = TFile('extracted_data_merge_{}.root'.format(merge_type), 'recreate')
         output_tree = TTree('data', 'Extracted Data')
     elif data_type == 'mc':
         file = TFile.Open('./trees/mc/T16NST5G_22_03-11_16outputfile.root')
         tree = file.Lcal
-        output_file = TFile('extracted_mc_RENAME.root', 'recreate')
+        output_file = TFile('extracted_mc_merge_{}.root'.format(merge_type), 'recreate')
         output_tree = TTree('mc', 'Extracted MC')
 
     n_events = tree.GetEntries()
@@ -206,8 +206,8 @@ def main(data_type):
         output_tree.Branch('cal_true_hit_y', cal_true_hit_y, 'cal_true_hit_y/F')
 
     for idx, event in enumerate(tree):
-        if idx == 1999:
-            break
+        # if idx == 10:
+        #    break
 
         if idx % (1000) == 0:
             time_min = (time.time() - start_time) // 60
@@ -237,7 +237,7 @@ def main(data_type):
 
         clusters_tr1 = clustering(towers_tr1, merge='off', det='Tr1')
         clusters_tr2 = clustering(towers_tr2, merge='off', det='Tr2')
-        clusters_cal = clustering(towers_cal, merge='on', det='Cal')
+        clusters_cal = clustering(towers_cal, merge=merge_type, det='Cal')
 
         if len(clusters_cal) != 0:
             clusters_tr1 = sorted(clusters_tr1, key=lambda x: abs(x.rho - clusters_cal[0].rho))
@@ -282,4 +282,7 @@ def main(data_type):
     output_file.Close()
 
 
-main('mc')
+main('data', merge_type='off')
+main('data', merge_type='on')
+main('mc', merge_type='off')
+main('mc', merge_type='on')
