@@ -1,7 +1,8 @@
 from ROOT import TFile, TTree
 import array
 import time
-
+import math
+import random
 from objects import Hit, HitMC, Tower, clustering
 
 
@@ -28,7 +29,7 @@ def extract_hits(event):
 
         hit = Hit(id_arr[i], channel_arr[i], signal_arr[i])
 
-        if (hit.sector == 0 or hit.sector == 3 or hit.layer == 7
+        if (hit.sector == 0 or hit.sector == 3 or hit.layer == 7 or hit.pad < 0
            or (hit.sector == 1 and hit.pad < 20)
            or (hit.sector == 2 and hit.pad < 20)
            or hit.sector < 0  # This one is changed due to python C++ difference in %.
@@ -54,9 +55,9 @@ def extract_mc(event):
     py = event.GetLeaf("Tracks.pY").GetValue()
     pz = event.GetLeaf("Tracks.pZ").GetValue()
     # Calculated as averaged through all hits at certain zeds
-    z_tr1 = 3300.5109092863354
-    z_tr2 = 3325.513351442981
-    z_cal = 3384.032740480225
+    z_tr1 = 3300.511
+    z_tr2 = 3325.513
+    z_cal = 3384.033
 
     # +177.2 is to convert y from montecarto to my coordinate system
     x_tr1 = vx + px * z_tr1 / pz
@@ -79,12 +80,23 @@ def extract_mc(event):
     hits_tracker2 = []
 
     for i in range(n_hits):
+        # mev2mip = 1. / 0.0885 / 9.17112e-01
+        mev2mip = 1. / 0.0885
+
         cell_id = event.GetLeaf("Hits.cellID").GetValue(i)
         energy = event.GetLeaf("Hits.eHit").GetValue(i)
+        energy *= mev2mip
+
+        S0 = 0.819
+        p1 = 2.166
+        p0 = 0.999 / 2.
+        if random.random() > (1 + math.erf((energy - S0) / p1)) * p0 and (((int(cell_id) >> 16) & 0xff) - 1) > 1:
+            continue
 
         hit = HitMC(cell_id, energy)
 
-        if (hit.sector == 0 or hit.sector == 3 or hit.layer == 7
+        if (hit.sector <= 0 or hit.sector == 3 or hit.layer == 7
+           or hit.pad < 0
            or (hit.sector == 1 and hit.pad < 20)
            or (hit.sector == 2 and hit.pad < 20)
            or (hit.layer >= 2 and hit.energy < 1.4)):
@@ -106,6 +118,9 @@ def extract_towers(hits):
     for pos in towers_pos:
         tower_hits = [hit for hit in hits if (hit.sector, hit.pad) == pos]
         towers.append(Tower(tower_hits))
+
+    towers = sorted(towers, key=lambda x: x.energy, reverse=True)
+
     return towers
 
 
@@ -125,35 +140,77 @@ def main(data_type, merge_type):
 
     n_events = tree.GetEntries()
 
+    tr1_n_hits = array.array('i', [0])
+    tr1_hit_pad = array.array('i', [0] * 128)
+    tr1_hit_sector = array.array('i', [0] * 128)
+    tr1_hit_layer = array.array('i', [0] * 128)
+    tr1_hit_rho = array.array('f', [0.0] * 128)
+    tr1_hit_x = array.array('f', [0.0] * 128)
+    tr1_hit_y = array.array('f', [0.0] * 128)
+    tr1_hit_energy = array.array('f', [0.0] * 128)
+
     tr1_n_clusters = array.array('i', [0])
-    tr1_cluster_pad = array.array('f', [0.0] * 256)
-    tr1_cluster_sector = array.array('f', [0.0] * 256)
-    tr1_cluster_layer = array.array('f', [0.0] * 256)
-    tr1_cluster_rho = array.array('f', [0.0] * 256)
-    tr1_cluster_x = array.array('f', [0.0] * 256)
-    tr1_cluster_y = array.array('f', [0.0] * 256)
-    tr1_cluster_energy = array.array('f', [0.0] * 256)
-    tr1_cluster_n_pads = array.array('i', [0] * 256)
+    tr1_cluster_pad = array.array('f', [0.0] * 128)
+    tr1_cluster_sector = array.array('f', [0.0] * 128)
+    tr1_cluster_layer = array.array('f', [0.0] * 128)
+    tr1_cluster_rho = array.array('f', [0.0] * 128)
+    tr1_cluster_x = array.array('f', [0.0] * 128)
+    tr1_cluster_y = array.array('f', [0.0] * 128)
+    tr1_cluster_energy = array.array('f', [0.0] * 128)
+    tr1_cluster_n_pads = array.array('i', [0] * 128)
+
+    tr2_n_hits = array.array('i', [0])
+    tr2_hit_pad = array.array('i', [0] * 128)
+    tr2_hit_sector = array.array('i', [0] * 128)
+    tr2_hit_layer = array.array('i', [0] * 128)
+    tr2_hit_rho = array.array('f', [0.0] * 128)
+    tr2_hit_x = array.array('f', [0.0] * 128)
+    tr2_hit_y = array.array('f', [0.0] * 128)
+    tr2_hit_energy = array.array('f', [0.0] * 128)
 
     tr2_n_clusters = array.array('i', [0])
-    tr2_cluster_pad = array.array('f', [0.0] * 256)
-    tr2_cluster_sector = array.array('f', [0.0] * 256)
-    tr2_cluster_layer = array.array('f', [0.0] * 256)
-    tr2_cluster_rho = array.array('f', [0.0] * 256)
-    tr2_cluster_x = array.array('f', [0.0] * 256)
-    tr2_cluster_y = array.array('f', [0.0] * 256)
-    tr2_cluster_energy = array.array('f', [0.0] * 256)
-    tr2_cluster_n_pads = array.array('i', [0] * 256)
+    tr2_cluster_pad = array.array('f', [0.0] * 128)
+    tr2_cluster_sector = array.array('f', [0.0] * 128)
+    tr2_cluster_layer = array.array('f', [0.0] * 128)
+    tr2_cluster_rho = array.array('f', [0.0] * 128)
+    tr2_cluster_x = array.array('f', [0.0] * 128)
+    tr2_cluster_y = array.array('f', [0.0] * 128)
+    tr2_cluster_energy = array.array('f', [0.0] * 128)
+    tr2_cluster_n_pads = array.array('i', [0] * 128)
+
+    cal_n_hits = array.array('i', [0])
+    cal_hit_pad = array.array('i', [0] * 128 * 5)
+    cal_hit_sector = array.array('i', [0] * 128 * 5)
+    cal_hit_layer = array.array('i', [0] * 128 * 5)
+    cal_hit_rho = array.array('f', [0.0] * 128 * 5)
+    cal_hit_x = array.array('f', [0.0] * 128 * 5)
+    cal_hit_y = array.array('f', [0.0] * 128 * 5)
+    cal_hit_energy = array.array('f', [0.0] * 128 * 5)
+
+    cal_n_towers = array.array('i', [0])
+    cal_tower_pad = array.array('i', [0] * 128)
+    cal_tower_sector = array.array('i', [0] * 128)
+    cal_tower_energy = array.array('f', [0.0] * 128)
+    cal_tower_cluster = array.array('i', [0] * 128)
 
     cal_n_clusters = array.array('i', [0])
-    cal_cluster_pad = array.array('f', [0.0] * 256)
-    cal_cluster_sector = array.array('f', [0.0] * 256)
-    cal_cluster_layer = array.array('f', [0.0] * 256)
-    cal_cluster_rho = array.array('f', [0.0] * 256)
-    cal_cluster_x = array.array('f', [0.0] * 256)
-    cal_cluster_y = array.array('f', [0.0] * 256)
-    cal_cluster_energy = array.array('f', [0.0] * 256)
-    cal_cluster_n_pads = array.array('i', [0] * 256)
+    cal_cluster_pad = array.array('f', [0.0] * 128 * 5)
+    cal_cluster_sector = array.array('f', [0.0] * 128 * 5)
+    cal_cluster_layer = array.array('f', [0.0] * 128 * 5)
+    cal_cluster_rho = array.array('f', [0.0] * 128 * 5)
+    cal_cluster_x = array.array('f', [0.0] * 128 * 5)
+    cal_cluster_y = array.array('f', [0.0] * 128 * 5)
+    cal_cluster_energy = array.array('f', [0.0] * 128 * 5)
+    cal_cluster_n_pads = array.array('i', [0] * 128 * 5)
+
+    output_tree.Branch('tr1_n_hits', tr1_n_hits, 'tr1_n_hits/I')
+    output_tree.Branch('tr1_hit_pad', tr1_hit_pad, 'tr1_hit_pad[tr1_n_hits]/I')
+    output_tree.Branch('tr1_hit_sector', tr1_hit_sector, 'tr1_hit_sector[tr1_n_hits]/I')
+    output_tree.Branch('tr1_hit_layer', tr1_hit_layer, 'tr1_hit_layer[tr1_n_hits]/I')
+    output_tree.Branch('tr1_hit_rho', tr1_hit_rho, 'tr1_hit_rho[tr1_n_hits]/F')
+    output_tree.Branch('tr1_hit_x', tr1_hit_x, 'tr1_hit_x[tr1_n_hits]/F')
+    output_tree.Branch('tr1_hit_y', tr1_hit_y, 'tr1_hit_y[tr1_n_hits]/F')
+    output_tree.Branch('tr1_hit_energy', tr1_hit_energy, 'tr1_hit_energy[tr1_n_hits]/F')
 
     output_tree.Branch('tr1_n_clusters', tr1_n_clusters, 'tr1_n_clusters/I')
     output_tree.Branch('tr1_cluster_pad', tr1_cluster_pad, 'tr1_cluster_pad[tr1_n_clusters]/F')
@@ -165,6 +222,15 @@ def main(data_type, merge_type):
     output_tree.Branch('tr1_cluster_energy', tr1_cluster_energy, 'tr1_cluster_energy[tr1_n_clusters]/F')
     output_tree.Branch('tr1_cluster_n_pads', tr1_cluster_n_pads, 'tr1_cluster_n_pads[tr1_n_clusters]/I')
 
+    output_tree.Branch('tr2_n_hits', tr2_n_hits, 'tr2_n_hits/I')
+    output_tree.Branch('tr2_hit_pad', tr2_hit_pad, 'tr2_hit_pad[tr2_n_hits]/I')
+    output_tree.Branch('tr2_hit_sector', tr2_hit_sector, 'tr2_hit_sector[tr2_n_hits]/I')
+    output_tree.Branch('tr2_hit_layer', tr2_hit_layer, 'tr2_hit_layer[tr2_n_hits]/I')
+    output_tree.Branch('tr2_hit_rho', tr2_hit_rho, 'tr2_hit_rho[tr2_n_hits]/F')
+    output_tree.Branch('tr2_hit_x', tr2_hit_x, 'tr2_hit_x[tr2_n_hits]/F')
+    output_tree.Branch('tr2_hit_y', tr2_hit_y, 'tr2_hit_y[tr2_n_hits]/F')
+    output_tree.Branch('tr2_hit_energy', tr2_hit_energy, 'tr2_hit_energy[tr2_n_hits]/F')
+
     output_tree.Branch('tr2_n_clusters', tr2_n_clusters, 'tr2_n_clusters/I')
     output_tree.Branch('tr2_cluster_pad', tr2_cluster_pad, 'tr2_cluster_pad[tr2_n_clusters]/F')
     output_tree.Branch('tr2_cluster_sector', tr2_cluster_sector, 'tr2_cluster_sector[tr2_n_clusters]/F')
@@ -174,6 +240,21 @@ def main(data_type, merge_type):
     output_tree.Branch('tr2_cluster_y', tr2_cluster_y, 'tr2_cluster_y[tr2_n_clusters]/F')
     output_tree.Branch('tr2_cluster_energy', tr2_cluster_energy, 'tr2_cluster_energy[tr2_n_clusters]/F')
     output_tree.Branch('tr2_cluster_n_pads', tr2_cluster_n_pads, 'tr2_cluster_n_pads[tr2_n_clusters]/I')
+
+    output_tree.Branch('cal_n_hits', cal_n_hits, 'cal_n_hits/I')
+    output_tree.Branch('cal_hit_pad', cal_hit_pad, 'cal_hit_pad[cal_n_hits]/I')
+    output_tree.Branch('cal_hit_sector', cal_hit_sector, 'cal_hit_sector[cal_n_hits]/I')
+    output_tree.Branch('cal_hit_layer', cal_hit_layer, 'cal_hit_layer[cal_n_hits]/I')
+    output_tree.Branch('cal_hit_rho', cal_hit_rho, 'cal_hit_rho[cal_n_hits]/F')
+    output_tree.Branch('cal_hit_x', cal_hit_x, 'cal_hit_x[cal_n_hits]/F')
+    output_tree.Branch('cal_hit_y', cal_hit_y, 'cal_hit_y[cal_n_hits]/F')
+    output_tree.Branch('cal_hit_energy', cal_hit_energy, 'cal_hit_energy[cal_n_hits]/F')
+
+    output_tree.Branch('cal_n_towers', cal_n_towers, 'cal_n_towers/I')
+    output_tree.Branch('cal_tower_pad', cal_tower_pad, 'cal_tower_pad[cal_n_towers]/I')
+    output_tree.Branch('cal_tower_sector', cal_tower_sector, 'cal_tower_sector[cal_n_towers]/I')
+    output_tree.Branch('cal_tower_energy', cal_tower_energy, 'cal_tower_energy[cal_n_towers]/F')
+    output_tree.Branch('cal_tower_cluster', cal_tower_cluster, 'cal_tower_cluster[cal_n_towers]/I')
 
     output_tree.Branch('cal_n_clusters', cal_n_clusters, 'cal_n_clusters/I')
     output_tree.Branch('cal_cluster_pad', cal_cluster_pad, 'cal_cluster_pad[cal_n_clusters]/F')
@@ -243,6 +324,16 @@ def main(data_type, merge_type):
             clusters_tr1 = sorted(clusters_tr1, key=lambda x: abs(x.rho - clusters_cal[0].rho))
             clusters_tr2 = sorted(clusters_tr2, key=lambda x: abs(x.rho - clusters_cal[0].rho))
 
+        tr1_n_hits[0] = len(hits_tr1)
+        for i, hit in enumerate(hits_tr1):
+            tr1_hit_pad[i] = hit.pad
+            tr1_hit_sector[i] = hit.sector
+            tr1_hit_layer[i] = hit.layer
+            tr1_hit_rho[i] = hit.rho
+            tr1_hit_x[i] = hit.x
+            tr1_hit_y[i] = hit.y
+            tr1_hit_energy[i] = hit.energy
+
         tr1_n_clusters[0] = len(clusters_tr1)
         for i, cluster in enumerate(clusters_tr1):
             tr1_cluster_pad[i] = cluster.pad
@@ -254,6 +345,16 @@ def main(data_type, merge_type):
             tr1_cluster_energy[i] = cluster.energy
             tr1_cluster_n_pads[i] = cluster.n_pads
 
+        tr2_n_hits[0] = len(hits_tr2)
+        for i, hit in enumerate(hits_tr2):
+            tr2_hit_pad[i] = hit.pad
+            tr2_hit_sector[i] = hit.sector
+            tr2_hit_layer[i] = hit.layer
+            tr2_hit_rho[i] = hit.rho
+            tr2_hit_x[i] = hit.x
+            tr2_hit_y[i] = hit.y
+            tr2_hit_energy[i] = hit.energy
+
         tr2_n_clusters[0] = len(clusters_tr2)
         for i, cluster in enumerate(clusters_tr2):
             tr2_cluster_pad[i] = cluster.pad
@@ -264,6 +365,23 @@ def main(data_type, merge_type):
             tr2_cluster_y[i] = cluster.y
             tr2_cluster_energy[i] = cluster.energy
             tr2_cluster_n_pads[i] = cluster.n_pads
+
+        cal_n_hits[0] = len(hits_cal)
+        for i, hit in enumerate(hits_cal):
+            cal_hit_pad[i] = hit.pad
+            cal_hit_sector[i] = hit.sector
+            cal_hit_layer[i] = hit.layer
+            cal_hit_rho[i] = hit.rho
+            cal_hit_x[i] = hit.x
+            cal_hit_y[i] = hit.y
+            cal_hit_energy[i] = hit.energy
+
+        cal_n_towers[0] = len(towers_cal)
+        for i, tower in enumerate(towers_cal):
+            cal_tower_pad[i] = tower.pad
+            cal_tower_sector[i] = tower.sector
+            cal_tower_energy[i] = tower.energy
+            cal_tower_cluster[i] = tower.cluster
 
         cal_n_clusters[0] = len(clusters_cal)
         for i, cluster in enumerate(clusters_cal):
@@ -282,7 +400,5 @@ def main(data_type, merge_type):
     output_file.Close()
 
 
-main('data', merge_type='off')
-main('data', merge_type='on')
-main('mc', merge_type='off')
 main('mc', merge_type='on')
+main('mc', merge_type='off')

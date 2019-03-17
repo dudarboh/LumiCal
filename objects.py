@@ -183,12 +183,10 @@ class Hit:
 
 class HitMC:
     def __init__(self, cell_id, energy):
-        mev2mip = 1. / 0.0885 / 9.17112e-01
-
         self.sector = ((int(cell_id) >> 8) & 0xff) - 11
         self.pad = int(cell_id) & 0xff
         self.layer = ((int(cell_id) >> 16) & 0xff) - 1
-        self.energy = energy * mev2mip
+        self.energy = energy
 
         self.rho = 80. + 0.9 + 1.8 * self.pad
         self.phi = np.pi / 2 + np.pi / 12 - np.pi / 48 - np.pi / 24 * self.sector
@@ -210,8 +208,9 @@ class Tower:
 
 
 class Cluster:
-    def __init__(self, cluster_hits, det):
+    def __init__(self, cluster_hits, cluster_towers, det):
         self.hits = cluster_hits
+        self.towers = cluster_towers
         self.det = det
 
         self.energy = self.get_energy()
@@ -247,6 +246,7 @@ class Cluster:
 
     def merge(self, cluster2):
         self.hits += cluster2.hits
+        self.towers += cluster2.towers
         self.energy = self.get_energy()
         self.weights = self.get_weights()
 
@@ -291,19 +291,23 @@ def set_clusters(towers):
                     tower.cluster = tower.neighbor.cluster
 
 
-def merge_clusters(clusters):
+def merge_clusters(clusters, towers):
     restart = True
     while restart:
-        for cluster1, cluster2 in ((cl1, cl2) for cl1 in clusters for cl2 in clusters):
-            if cluster1 == cluster2:
-                continue
+        for idx1, cluster1 in enumerate(clusters):
+            for idx2, cluster2 in enumerate(clusters):
+                if cluster1 == cluster2:
+                    continue
+                else:
+                    distance = abs(cluster1.pad - cluster2.pad)
+                    ratio = cluster2.energy / cluster1.energy
+                    if distance < 5 or (distance < 20 and ratio < 0.1 - 0.1 / 20 * distance):
+                        cluster1.merge(cluster2)
+                        clusters.remove(cluster2)
+                        break
             else:
-                distance = abs(cluster1.pad - cluster2.pad)
-                ratio = cluster2.energy / cluster1.energy
-                if distance < 5 or (distance < 20 and ratio < 0.1 - 0.1 / 20 * distance):
-                    cluster1.merge(cluster2)
-                    clusters.remove(cluster2)
-                    break
+                continue
+            break
         else:
             restart = False
 
@@ -320,15 +324,27 @@ def clustering(towers, merge, det):
     n_clusters = max([tower.cluster for tower in towers]) + 1
     for cluster in range(n_clusters):
         cluster_hits = []
+        cluster_towers = []
         for tower in towers:
             if tower.cluster == cluster:
                 cluster_hits.extend(tower.hits)
-        clusters.append(Cluster(cluster_hits, det))
-
-    if merge == 'on':
-        merge_clusters(clusters)
+                cluster_towers.append(tower)
+        clusters.append(Cluster(cluster_hits, cluster_towers, det))
 
     clusters = sorted(clusters, key=lambda x: x.energy, reverse=True)
+    for i, cluster in enumerate(clusters):
+        for tower in cluster.towers:
+            if tower.cluster != i:
+                tower.cluster = i
+
+    if merge == 'on':
+        merge_clusters(clusters, towers)
+
+    clusters = sorted(clusters, key=lambda x: x.energy, reverse=True)
+    for i, cluster in enumerate(clusters):
+        for tower in cluster.towers:
+            if tower.cluster != i:
+                tower.cluster = i
 
     return clusters
 
