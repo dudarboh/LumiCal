@@ -1,6 +1,7 @@
-from ROOT import TFile, gROOT, TGraphErrors, TH1F, TGraph, TH2F, TCanvas, TPad, TF1, gStyle
+from ROOT import TFile, gROOT, TGraphErrors, TH1F, TGraph, TCanvas, TPad, TF1, gStyle
 import numpy as np
 import array
+from objects import langaufun
 
 
 class Detector:
@@ -20,8 +21,8 @@ class Detector:
         self.n_events_mc = self.tree_mc.GetEntries()
 
     def backscattered_tracks(self):
-        canvas = TCanvas('backscattered_tracks', 'title', 1024, 768)
-        canvas_mc = TCanvas('backscattered_tracks_mc', 'title', 1024, 768)
+        canvas = TCanvas('backscattered_tracks', 'backscattered_tracks', 1024, 768)
+        canvas_mc = TCanvas('backscattered_tracks_mc', 'backscattered_tracks_mc', 1024, 768)
         canvas.cd()
         gStyle.SetOptStat(1110)
 
@@ -34,7 +35,7 @@ class Detector:
         h_tracks = gROOT.FindObject('h_tracks')
         h_tracks.SetTitle('Data, backscattered track hits in calorimeter;x, [mm];y, [mm]')
         h_tracks.Draw('colz')
-        canvas.Write('h_tracks')
+        canvas.Write('backscattered_tracks')
 
         canvas_mc.cd()
         self.tree_mc.Draw('(tr1_cluster_y[1]+23*4.5*(tr2_cluster_y[1]-tr1_cluster_y[1])/22.5):\
@@ -45,7 +46,7 @@ class Detector:
         h_tracks_mc.SetTitle('MC, backscattered track hits in calorimeter;x, [mm];y, [mm]')
 
         h_tracks_mc.Draw('colz')
-        canvas_mc.Write('h_tracks_mc')
+        canvas_mc.Write('backscattered_tracks_mc')
 
     def simple_event(self):
         canvas = TCanvas('simple_event', 'title', 1024, 768)
@@ -384,7 +385,7 @@ class Detector:
 class Calorimeter(Detector):
 
     # Newly made for presentation
-    def shower_y(self):
+    def y(self):
         canvas = TCanvas('shower_y', 'shower_y', 1024, 768)
         n_bins = 180
         first = 110
@@ -421,7 +422,7 @@ class Calorimeter(Detector):
         gStyle.SetOptStat(1110)
         canvas.Write('shower_y')
 
-    def shower_x(self):
+    def x(self):
         canvas = TCanvas('shower_x', 'title', 1024, 768)
         n_bins = 60
         first = -15
@@ -458,7 +459,7 @@ class Calorimeter(Detector):
         gStyle.SetOptStat(1110)
         canvas.Write('shower_x')
 
-    def shower_energy(self):
+    def energy(self):
         canvas = TCanvas('shower_energy', 'shower_energy', 1024, 768)
         n_bins = 100
         first = 0
@@ -487,7 +488,7 @@ class Calorimeter(Detector):
         gStyle.SetOptStat(1110)
         canvas.Write('shower_energy')
 
-    def shower_n_pads(self):
+    def n_pads(self):
         canvas = TCanvas('shower_n_pads', 'shower_n_pads', 1024, 768)
         n_bins = 80
         first = 0
@@ -516,7 +517,7 @@ class Calorimeter(Detector):
         gStyle.SetOptStat(1110)
         canvas.Write('shower_n_pads')
 
-    def shower_n_clusters(self):
+    def n_clusters(self):
         canvas = TCanvas('shower_n_clusters', 'shower_n_clusters', 1024, 768)
         n_bins = 7
         first = 0
@@ -543,9 +544,9 @@ class Calorimeter(Detector):
         canvas.BuildLegend()
         h_mc.SetTitle('Number of clusters')
         gStyle.SetOptStat(1110)
-        canvas.Write('shower_n_clusters in event')
+        canvas.Write('shower_n_clusters')
 
-    def shower_layer(self):
+    def layer(self):
         canvas = TCanvas('shower_layer', 'shower_layer', 1024, 768)
         n_bins = 70
         first = 0
@@ -574,8 +575,129 @@ class Calorimeter(Detector):
         gStyle.SetOptStat(1110)
         canvas.Write('shower_layer')
 
+    def clusters_distance_ratio(self):
+        canvas = TCanvas('clst1_clst2_distance_eratio', 'clst1_clst2_distance_eratio', 1024, 768)
+        canvas.cd()
+        gStyle.SetOptStat(1110)
+
+        self.tree_data.Draw('nomerge.cal_cluster_energy[1]/nomerge.cal_cluster_energy[0]:(nomerge.cal_cluster_y[1]-nomerge.cal_cluster_y[0])\
+                              >>h_d_to_ratio(800, -80, 80, 100, 0, 1)')
+
+        h_d_to_ratio = gROOT.FindObject('h_d_to_ratio')
+        h_d_to_ratio.SetTitle('Data, distance between clusters 1 and 2 to their energy ratio;d, [mm];Energy ratio')
+        h_d_to_ratio.Draw('colz')
+        canvas.Write('h_d_to_ratio')
+
 
 class Tracker1(Detector):
+
+    def energy(self):
+        canvas = TCanvas('tr1_energy', 'tr1_energy', 1024, 768)
+        n_bins = 100
+        first = 0
+        last = 10
+
+        langaus_fit = TF1('langaus_fit', langaufun, 0.25, 8., 4)
+        langaus_fit.SetNpx(500)
+        langaus_fit.SetLineColor(2)
+        langaus_fit.SetMarkerStyle(1)
+        langaus_fit.SetTitle('Landau*Gaus fit')
+        langaus_fit.SetParNames("Width", "MP", "Area", "GSigma")
+        langaus_fit.SetParameters(0.07, 1, 1., 0.13)
+
+        self.tree_data.Draw('tr1_cluster_energy[0]>>h_data({}, {}, {})'.format(n_bins, first, last))
+        self.tree_mc.Draw('tr1_cluster_energy[0]>>h_mc({}, {}, {})'.format(n_bins, first, last))
+        h_data = gROOT.FindObject('h_data')
+        h_mc = gROOT.FindObject('h_mc')
+
+        h_mc.Draw('histo')
+        h_mc.Scale(1. / h_mc.GetEntries())
+        h_data.Draw('histosame')
+        h_data.Scale(1. / h_data.GetEntries())
+
+        h_data.Fit('langaus_fit')
+        langaus_fit.Draw('same')
+
+        h_mc.SetMaximum(max(h_mc.GetBinContent(h_mc.GetMaximumBin()), h_data.GetBinContent(h_data.GetMaximumBin())) + 0.01)
+
+        h_mc.SetFillColor(5)
+        h_mc.SetTitle('MC;energy, [MIP];#frac{N_{ev}}{N_{tot}}')
+
+        h_data.SetLineWidth(3)
+        h_data.SetTitle('Data')
+
+        canvas.BuildLegend()
+        h_mc.SetTitle('Tracker1')
+        gStyle.SetOptStat(1110)
+        canvas.Write('tr1_energy')
+
+    def bs_energy(self):
+        canvas = TCanvas('tr1_bs_energy', 'tr1_bs_energy', 1024, 768)
+        n_bins = 100
+        first = 0
+        last = 10
+        langaus_fit = TF1('langaus_fit', langaufun, 0.5, 8., 4)
+        langaus_fit.SetNpx(500)
+        langaus_fit.SetLineColor(2)
+        langaus_fit.SetMarkerStyle(1)
+        langaus_fit.SetTitle('Landau*Gaus fit')
+        langaus_fit.SetParNames("Width", "MP", "Area", "GSigma")
+        langaus_fit.SetParameters(0.07, 1, 1., 0.13)
+
+        self.tree_data.Draw('tr1_cluster_energy[1]>>h_data({}, {}, {})'.format(n_bins, first, last))
+        self.tree_mc.Draw('tr1_cluster_energy[1]>>h_mc({}, {}, {})'.format(n_bins, first, last))
+        h_data = gROOT.FindObject('h_data')
+        h_mc = gROOT.FindObject('h_mc')
+
+        h_mc.Draw('histo')
+        h_mc.Scale(1. / h_mc.GetEntries())
+        h_data.Draw('histosame')
+        h_data.Scale(1. / h_data.GetEntries())
+
+        h_data.Fit('langaus_fit')
+        langaus_fit.Draw('same')
+
+        h_mc.SetMaximum(max(h_mc.GetBinContent(h_mc.GetMaximumBin()), h_data.GetBinContent(h_data.GetMaximumBin())) + 0.01)
+
+        h_mc.SetFillColor(5)
+        h_mc.SetTitle('MC;energy, [MIP];#frac{N_{ev}}{N_{tot}}')
+
+        h_data.SetLineWidth(3)
+        h_data.SetTitle('Data')
+
+        canvas.BuildLegend()
+        h_mc.SetTitle('Tracker1')
+        gStyle.SetOptStat(1110)
+        canvas.Write('tr1_bs_energy')
+
+    def n_clusters(self):
+        canvas = TCanvas('tr1_n_clusters', 'tr1_n_clusters', 1024, 768)
+        n_bins = 5
+        first = 0
+        last = 5
+
+        self.tree_data.Draw('tr1_n_clusters>>h_data({}, {}, {})'.format(n_bins, first, last))
+        self.tree_mc.Draw('tr1_n_clusters>>h_mc({}, {}, {})'.format(n_bins, first, last))
+        h_data = gROOT.FindObject('h_data')
+        h_mc = gROOT.FindObject('h_mc')
+
+        h_mc.Draw('histo')
+        h_mc.Scale(1. / h_mc.GetEntries())
+        h_data.Draw('histosame')
+        h_data.Scale(1. / h_data.GetEntries())
+
+        h_mc.SetMaximum(max(h_mc.GetBinContent(h_mc.GetMaximumBin()), h_data.GetBinContent(h_data.GetMaximumBin())) + 0.01)
+
+        h_mc.SetFillColor(5)
+        h_mc.SetTitle('MC;N_{clusters};#frac{N_{ev}}{N_{tot}}')
+
+        h_data.SetLineWidth(3)
+        h_data.SetTitle('Data')
+
+        canvas.BuildLegend()
+        h_mc.SetTitle('Tracker1')
+        gStyle.SetOptStat(1110)
+        canvas.Write('tr1_n_clusters')
 
     def distance_to_shower(self):
         canvas = TCanvas('tr1_distance_to_shower', 'tr1_distance_to_shower', 1024, 768)
@@ -796,6 +918,113 @@ class Tracker1(Detector):
 
 
 class Tracker2(Detector):
+
+    def energy(self):
+        canvas = TCanvas('tr2_energy', 'tr2_energy', 1024, 768)
+        n_bins = 100
+        first = 0
+        last = 10
+        langaus_fit = TF1('langaus_fit', langaufun, 0.25, 8., 4)
+        langaus_fit.SetNpx(500)
+        langaus_fit.SetLineColor(2)
+        langaus_fit.SetMarkerStyle(1)
+        langaus_fit.SetTitle('Landau*Gaus fit')
+        langaus_fit.SetParNames("Width", "MP", "Area", "GSigma")
+        langaus_fit.SetParameters(0.07, 1, 1., 0.13)
+
+        self.tree_data.Draw('tr2_cluster_energy[0]>>h_data({}, {}, {})'.format(n_bins, first, last))
+        self.tree_mc.Draw('tr2_cluster_energy[0]>>h_mc({}, {}, {})'.format(n_bins, first, last))
+        h_data = gROOT.FindObject('h_data')
+        h_mc = gROOT.FindObject('h_mc')
+
+        h_mc.Draw('histo')
+        h_mc.Scale(1. / h_mc.GetEntries())
+        h_data.Draw('histosame')
+        h_data.Scale(1. / h_data.GetEntries())
+
+        h_data.Fit('langaus_fit')
+        langaus_fit.Draw('same')
+
+        h_mc.SetMaximum(max(h_mc.GetBinContent(h_mc.GetMaximumBin()), h_data.GetBinContent(h_data.GetMaximumBin())) + 0.01)
+
+        h_mc.SetFillColor(5)
+        h_mc.SetTitle('MC;energy, [MIP];#frac{N_{ev}}{N_{tot}}')
+
+        h_data.SetLineWidth(3)
+        h_data.SetTitle('Data')
+
+        canvas.BuildLegend()
+        h_mc.SetTitle('Tracker2')
+        gStyle.SetOptStat(1110)
+        canvas.Write('tr2_energy')
+
+    def bs_energy(self):
+        canvas = TCanvas('tr2_bs_energy', 'tr2_bs_energy', 1024, 768)
+        n_bins = 100
+        first = 0
+        last = 10
+        langaus_fit = TF1('langaus_fit', langaufun, 0.5, 8., 4)
+        langaus_fit.SetNpx(500)
+        langaus_fit.SetLineColor(2)
+        langaus_fit.SetMarkerStyle(1)
+        langaus_fit.SetTitle('Landau*Gaus fit')
+        langaus_fit.SetParNames("Width", "MP", "Area", "GSigma")
+        langaus_fit.SetParameters(0.07, 1, 1., 0.13)
+
+        self.tree_data.Draw('tr2_cluster_energy[1]>>h_data({}, {}, {})'.format(n_bins, first, last))
+        self.tree_mc.Draw('tr2_cluster_energy[1]>>h_mc({}, {}, {})'.format(n_bins, first, last))
+        h_data = gROOT.FindObject('h_data')
+        h_mc = gROOT.FindObject('h_mc')
+
+        h_mc.Draw('histo')
+        h_mc.Scale(1. / h_mc.GetEntries())
+        h_data.Draw('histosame')
+        h_data.Scale(1. / h_data.GetEntries())
+
+        h_data.Fit('langaus_fit')
+        langaus_fit.Draw('same')
+
+        h_mc.SetMaximum(max(h_mc.GetBinContent(h_mc.GetMaximumBin()), h_data.GetBinContent(h_data.GetMaximumBin())) + 0.01)
+
+        h_mc.SetFillColor(5)
+        h_mc.SetTitle('MC;energy, [MIP];#frac{N_{ev}}{N_{tot}}')
+
+        h_data.SetLineWidth(3)
+        h_data.SetTitle('Data')
+
+        canvas.BuildLegend()
+        h_mc.SetTitle('Tracker2')
+        gStyle.SetOptStat(1110)
+        canvas.Write('tr2_bs_energy')
+
+    def n_clusters(self):
+        canvas = TCanvas('tr2_n_clusters', 'tr2_n_clusters', 1024, 768)
+        n_bins = 5
+        first = 0
+        last = 5
+
+        self.tree_data.Draw('tr2_n_clusters>>h_data({}, {}, {})'.format(n_bins, first, last))
+        self.tree_mc.Draw('tr2_n_clusters>>h_mc({}, {}, {})'.format(n_bins, first, last))
+        h_data = gROOT.FindObject('h_data')
+        h_mc = gROOT.FindObject('h_mc')
+
+        h_mc.Draw('histo')
+        h_mc.Scale(1. / h_mc.GetEntries())
+        h_data.Draw('histosame')
+        h_data.Scale(1. / h_data.GetEntries())
+
+        h_mc.SetMaximum(max(h_mc.GetBinContent(h_mc.GetMaximumBin()), h_data.GetBinContent(h_data.GetMaximumBin())) + 0.01)
+
+        h_mc.SetFillColor(5)
+        h_mc.SetTitle('MC;N_{clusters};#frac{N_{ev}}{N_{tot}}')
+
+        h_data.SetLineWidth(3)
+        h_data.SetTitle('Data')
+
+        canvas.BuildLegend()
+        h_mc.SetTitle('Tracker2')
+        gStyle.SetOptStat(1110)
+        canvas.Write('tr2_n_clusters')
 
     def distance_to_shower(self):
         canvas = TCanvas('tr2_distance_to_shower', 'tr2_distance_to_shower', 1024, 768)
@@ -1042,26 +1271,31 @@ def main():
     # data.number_of_bs_events()
     # data.w0_resolution()
     cal = Calorimeter()
-    cal.shower_x()
-    cal.shower_y()
-    cal.shower_layer()
-    cal.shower_n_clusters()
-    cal.shower_n_pads()
-    cal.shower_energy()
+    # cal.x()
+    # cal.y()
+    # cal.layer()
+    # cal.n_clusters()
+    # cal.n_pads()
+    # cal.energy()
+    # cal.backscattered_tracks()
+
+    cal.clusters_distance_ratio()
 
     tr1 = Tracker1()
-    tr1.distance_to_shower()
-    tr1.efficiency()
-    tr1.distance_to_shower_scattered()
-    tr1.all_clst_shower_distance()
+    tr1.n_clusters()
+    tr1.bs_energy()
+    # tr1.distance_to_shower()
+    # tr1.efficiency()
+    # tr1.distance_to_shower_scattered()
+    # tr1.all_clst_shower_distance()
 
     tr2 = Tracker2()
-    tr2.distance_to_shower()
-    tr2.efficiency()
-    tr2.distance_to_shower_scattered()
-    tr2.all_clst_shower_distance()
-
-    cal.backscattered_tracks()
+    tr2.n_clusters()
+    tr2.bs_energy()
+    # tr2.distance_to_shower()
+    # tr2.efficiency()
+    # tr2.distance_to_shower_scattered()
+    # tr2.all_clst_shower_distance()
 
     input('Yaay I am finished :3')
 
