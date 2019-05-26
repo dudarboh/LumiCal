@@ -1,26 +1,24 @@
 from ROOT import TFile, gROOT, TGraphErrors, TH1F, TGraph, TCanvas, TPad, TF1, gStyle
 import numpy as np
 import array
-from objects import langaufun
+from store_file import langaufun
 
 
 class Detector:
     output_file = TFile('RENAME.root', 'recreate')
+    file_data = TFile.Open('./trees/extracted_data_merge_on.root', 'read')
+    tree_data = file_data.data
+    tree_data.AddFriend('nomerge = data', './trees/extracted_data_merge_off.root')
+
+    file_mc = TFile.Open('./trees/extracted_mc_merge_on.root', 'read')
+    tree_mc = file_mc.mc
+    tree_mc.AddFriend('nomerge = mc', './trees/extracted_mc_merge_off.root')
 
     def __init__(self):
-        self.file_data = TFile.Open('./trees/extracted_data_merge_on.root')
-        self.tree_data = self.file_data.data
-        self.tree_data.AddFriend('nomerge = data', './trees/extracted_data_merge_off.root')
-
-        self.file_mc = TFile.Open('./trees/extracted_mc_merge_on.root')
-        self.tree_mc = self.file_mc.mc
-        self.tree_mc.AddFriend('nomerge = mc', './trees/extracted_mc_merge_off.root')
-
         self.output_file.cd()
-        self.n_events_data = self.tree_data.GetEntries()
-        self.n_events_mc = self.tree_mc.GetEntries()
 
-    def backscattered_tracks(self):
+    @classmethod
+    def backscattered_tracks(cls):
         canvas = TCanvas('backscattered_tracks', 'backscattered_tracks', 1024, 768)
         canvas_mc = TCanvas('backscattered_tracks_mc', 'backscattered_tracks_mc', 1024, 768)
         canvas.cd()
@@ -28,7 +26,7 @@ class Detector:
 
         cuts = 'cal_n_clusters == 1 && cal_cluster_rho[0] > 158 && cal_cluster_rho[0] < 168'
 
-        self.tree_data.Draw('(tr1_cluster_y[1]+23*4.5*(tr2_cluster_y[1]-tr1_cluster_y[1])/22.5):\
+        cls.tree_data.Draw('(tr1_cluster_y[1]+23*4.5*(tr2_cluster_y[1]-tr1_cluster_y[1])/22.5):\
                              (tr1_cluster_x[1]+23*4.5*(tr2_cluster_x[1]-tr1_cluster_x[1])/22.5)\
                               >>h_tracks(100, -51, 51, 100, 0, 196)', cuts)
 
@@ -38,7 +36,7 @@ class Detector:
         canvas.Write('backscattered_tracks')
 
         canvas_mc.cd()
-        self.tree_mc.Draw('(tr1_cluster_y[1]+23*4.5*(tr2_cluster_y[1]-tr1_cluster_y[1])/22.5):\
+        cls.tree_mc.Draw('(tr1_cluster_y[1]+23*4.5*(tr2_cluster_y[1]-tr1_cluster_y[1])/22.5):\
                              (tr1_cluster_x[1]+23*4.5*(tr2_cluster_x[1]-tr1_cluster_x[1])/22.5)\
                               >>h_tracks_mc(100, -51, 51, 100, 0, 196)', cuts)
 
@@ -48,7 +46,8 @@ class Detector:
         h_tracks_mc.Draw('colz')
         canvas_mc.Write('backscattered_tracks_mc')
 
-    def simple_event(self):
+    @classmethod
+    def simple_event(cls):
         canvas = TCanvas('simple_event', 'title', 1024, 768)
         canvas.cd()
         gStyle.SetOptStat(0)
@@ -57,25 +56,26 @@ class Detector:
         cuts_cluster = '(nomerge.cal_tower_cluster+1)*(Entry$==532)'
         cuts_cluster_merged = '(cal_tower_cluster+1)*(Entry$==532)'
 
-        self.tree_data.Draw('cal_tower_pad:cal_tower_sector>>h_event(5,0,5,20,35,55)', cuts_event)
+        cls.tree_data.Draw('cal_tower_pad:cal_tower_sector>>h_event(5,0,5,20,35,55)', cuts_event)
         h_event = gROOT.FindObject('h_event')
         h_event.Draw('colztext')
         h_event.SetTitle('Signals, event #532;sector number;pad number')
         canvas.Write('h_event')
 
-        self.tree_data.Draw('nomerge.cal_tower_pad:nomerge.cal_tower_sector>>h_cluster(5,0,5,20,35,55)', cuts_cluster)
+        cls.tree_data.Draw('nomerge.cal_tower_pad:nomerge.cal_tower_sector>>h_cluster(5,0,5,20,35,55)', cuts_cluster)
         h_cluster = gROOT.FindObject('h_cluster')
         h_cluster.Draw('colztext')
         h_cluster.SetTitle('Clusters, event #532;sector number;pad number')
         canvas.Write('h_cluster')
 
-        self.tree_data.Draw('cal_tower_pad:cal_tower_sector>>h_cluster_merged(5,0,5,20,35,55)', cuts_cluster_merged)
+        cls.tree_data.Draw('cal_tower_pad:cal_tower_sector>>h_cluster_merged(5,0,5,20,35,55)', cuts_cluster_merged)
         h_cluster_merged = gROOT.FindObject('h_cluster_merged')
         h_cluster_merged.Draw('colztext')
         h_cluster_merged.SetTitle('Clusters merged, event #532;sector number;pad number')
         canvas.Write('h_cluster_merged')
 
-    def number_of_bs_events(self):
+    @classmethod
+    def number_of_bs_events(cls):
         good_cut = 'cal_n_clusters == 1'
         cuts_11 = 'tr1_n_clusters == 1 && tr2_n_clusters == 1 && cal_n_clusters == 1'
         cuts_12 = 'tr1_n_clusters == 1 && tr2_n_clusters == 2 && cal_n_clusters == 1'
@@ -105,14 +105,14 @@ class Detector:
         print('01 Events:', 100 * gROOT.FindObject('h01_data').GetN() / n_data_events)
         print('00 Events:', 100 * gROOT.FindObject('h00_data').GetN() / n_data_events)
 
-        self.tree_mc.Draw('>>good_mc', good_cut)
-        self.tree_mc.Draw('>>h11_mc', cuts_11)
-        self.tree_mc.Draw('>>h12_mc', cuts_12)
-        self.tree_mc.Draw('>>h21_mc', cuts_21)
-        self.tree_mc.Draw('>>h22_mc', cuts_22)
-        self.tree_mc.Draw('>>h10_mc', cuts_10)
-        self.tree_mc.Draw('>>h01_mc', cuts_01)
-        self.tree_mc.Draw('>>h00_mc', cuts_00)
+        cls.tree_mc.Draw('>>good_mc', good_cut)
+        cls.tree_mc.Draw('>>h11_mc', cuts_11)
+        cls.tree_mc.Draw('>>h12_mc', cuts_12)
+        cls.tree_mc.Draw('>>h21_mc', cuts_21)
+        cls.tree_mc.Draw('>>h22_mc', cuts_22)
+        cls.tree_mc.Draw('>>h10_mc', cuts_10)
+        cls.tree_mc.Draw('>>h01_mc', cuts_01)
+        cls.tree_mc.Draw('>>h00_mc', cuts_00)
         n_mc_events = gROOT.FindObject('good_mc').GetN()
 
         print('Total mc Events:', n_mc_events)
@@ -124,7 +124,8 @@ class Detector:
         print('01 Events:', 100 * gROOT.FindObject('h01_mc').GetN() / n_mc_events)
         print('00 Events:', 100 * gROOT.FindObject('h00_mc').GetN() / n_mc_events)
 
-    def w0_resolution(self):
+    @staticmethod
+    def w0_resolution():
         canvas = TCanvas('w0_scan', 'title', 1024, 768)
         canvas.cd()
         n = 9
@@ -134,7 +135,8 @@ class Detector:
         w0_graph.Draw()
         canvas.Write('w0_graph')
 
-    def shower_distance(self, tr_number, cluster_number, tr1_n_clusters, tr2_n_clusters):
+    @classmethod
+    def shower_distance(cls, tr_number, cluster_number, tr1_n_clusters, tr2_n_clusters):
         canvas = TCanvas('shower_distance', 'title', 1024, 768)
 
         h_name = 'tr{}_clst{}_shower_distance_{}{}'.format(tr_number, cluster_number, tr1_n_clusters, tr2_n_clusters)
@@ -143,16 +145,16 @@ class Detector:
 
         cuts = 'tr1_n_clusters == {} && tr2_n_clusters == {}'.format(tr1_n_clusters, tr2_n_clusters)
 
-        self.tree_data.Draw(distance + '>>' + h_name + '(100, -60, 40)', cuts)
-        self.tree_mc.Draw(distance + '>>' + h_name + '_mc' + '(100, -60, 40)', cuts)
+        cls.tree_data.Draw(distance + '>>' + h_name + '(100, -60, 40)', cuts)
+        cls.tree_mc.Draw(distance + '>>' + h_name + '_mc' + '(100, -60, 40)', cuts)
 
         h_data = gROOT.FindObject(h_name)
         h_mc = gROOT.FindObject(h_name + '_mc')
 
         h_mc.Draw('histo')
-        h_mc.Scale(1. / self.n_events_mc)
+        h_mc.Scale(1. / h_mc.GetEntries())
         h_data.Draw('histosame')
-        h_data.Scale(1. / self.n_events_data)
+        h_data.Scale(1. / h_mc.GetEntries())
 
         h_mc.SetMaximum(max(h_mc.GetBinContent(h_mc.GetMaximumBin()), h_data.GetBinContent(h_data.GetMaximumBin())) + 0.01)
         h_mc.SetTitle('MC')
@@ -170,9 +172,87 @@ class Detector:
 
         canvas.Write(h_name)
 
+    @classmethod
+    def e_ratio_tr2_tr1(cls):
+        canvas = TCanvas('e_ratio_tr2_tr1', 'e_ratio_tr2_tr1', 1024, 768)
+        n_bins = 15
+        first = 0
+        last = 10
+
+        cls.tree_data.Draw('tr1_cluster_energy[1]>>h_data_tr1({}, {}, {})'.format(n_bins, first, last))
+        cls.tree_mc.Draw('tr1_cluster_energy[1]>>h_mc_tr1({}, {}, {})'.format(n_bins, first, last))
+        h_data_tr1 = gROOT.FindObject('h_data_tr1')
+        h_data_tr1.Scale(1. / h_data_tr1.GetEntries())
+        h_mc_tr1 = gROOT.FindObject('h_mc_tr1')
+        h_mc_tr1.Scale(1. / h_mc_tr1.GetEntries())
+
+        cls.tree_data.Draw('tr2_cluster_energy[1]>>h_data_tr2({}, {}, {})'.format(n_bins, first, last))
+        cls.tree_mc.Draw('tr2_cluster_energy[1]>>h_mc_tr2({}, {}, {})'.format(n_bins, first, last))
+        h_data_tr2 = gROOT.FindObject('h_data_tr2')
+        h_data_tr2.Scale(1. / h_data_tr2.GetEntries())
+
+        h_mc_tr2 = gROOT.FindObject('h_mc_tr2')
+        h_mc_tr2.Scale(1. / h_mc_tr2.GetEntries())
+
+        h_ratio_data = h_data_tr2.Clone()
+        h_ratio_data.Divide(h_data_tr1)
+        h_ratio_mc = h_mc_tr2.Clone()
+        h_ratio_mc.Divide(h_mc_tr1)
+
+        h_ratio_mc.Draw('HISTOPE')
+        h_ratio_data.Draw('HISTOPEsame')
+
+        h_ratio_mc.SetMaximum(max(h_ratio_mc.GetBinContent(h_ratio_mc.GetMaximumBin()), h_ratio_data.GetBinContent(h_ratio_data.GetMaximumBin())) + 0.01)
+
+        h_ratio_mc.SetMarkerColor(2)
+        h_ratio_mc.SetMarkerStyle(20)
+        h_ratio_mc.SetMarkerSize(1.5)
+        h_ratio_mc.SetTitle('MC;energy, [MIP];#frac{E_{tr2}}{E_{tr1}}')
+
+        h_ratio_data.SetMarkerStyle(20)
+        h_ratio_data.SetMarkerColor(1)
+        h_ratio_data.SetMarkerSize(1.5)
+        h_ratio_data.SetTitle('Data')
+
+        canvas.BuildLegend()
+        h_ratio_mc.SetTitle('Trackers energy ratio')
+        gStyle.SetOptStat(0)
+        canvas.Write('e_ratio_tr2_tr1')
+
+    @classmethod
+    def energy_layer2(cls):
+        canvas = TCanvas('energy_layer2', 'energy_layer2', 1024, 768)
+        n_bins = 100
+        first = 0
+        last = 200
+
+        cls.tree_data.Draw('Sum$(cal_hit_energy*(cal_hit_layer == 2))>>h_data({}, {}, {})'.format(n_bins, first, last))
+        cls.tree_mc.Draw('Sum$(cal_hit_energy*(cal_hit_layer == 2))>>h_mc({}, {}, {})'.format(n_bins, first, last))
+        h_data = gROOT.FindObject('h_data')
+        h_mc = gROOT.FindObject('h_mc')
+
+        h_mc.Draw('histo')
+        h_mc.Scale(1. / h_mc.GetEntries())
+        h_data.Draw('histosame')
+        h_data.Scale(1. / h_data.GetEntries())
+
+        h_mc.SetMaximum(max(h_mc.GetBinContent(h_mc.GetMaximumBin()), h_data.GetBinContent(h_data.GetMaximumBin())) + 0.01)
+
+        h_mc.SetFillColor(5)
+        h_mc.SetTitle('MC;energy, [MIP];#frac{N_{ev}}{N_{tot}}')
+
+        h_data.SetLineWidth(3)
+        h_data.SetTitle('Data')
+
+        canvas.BuildLegend()
+        h_mc.SetTitle('energy_layer2')
+        gStyle.SetOptStat(1110)
+        canvas.Write('energy_layer2')
+
     ###
 
-    def residuals_111(self):
+    @classmethod
+    def residuals_111(cls):
         z_tr1 = 0.
         z_tr2 = 5 * 4.5
         z_cal = 25 * 4.5
@@ -190,7 +270,7 @@ class Detector:
         h_tr2_mc = TH1F('h_tr2_res111_mc', 'Tracker2 residuals MC', 500, -20, 20)
         h_cal_mc = TH1F('h_cal_res111_mc', 'Calorimeter residuals MC', 500, -20, 20)
 
-        for event in self.tree_data:
+        for event in cls.tree_data:
             if not (event.tr1_n_clusters == 1
                     and event.tr2_n_clusters == 1
                     and event.cal_n_clusters == 1
@@ -209,7 +289,7 @@ class Detector:
             h_tr2.Fill(tr2_residual)
             h_cal.Fill(cal_residual)
 
-        for event in self.tree_mc:
+        for event in cls.tree_mc:
             if not (event.tr1_n_clusters == 1
                     and event.tr2_n_clusters == 1
                     and event.cal_n_clusters == 1
@@ -229,12 +309,12 @@ class Detector:
             h_cal_mc.Fill(cal_residual)
 
         h_tr1_mc.Draw('histo')
-        h_tr1_mc.Scale(1. / self.n_events_mc)
+        h_tr1_mc.Scale(1. / h_tr1_mc.GetEntries())
 
         h_tr1_mc.SetFillColor(5)
 
         h_tr1.Draw('histosame')
-        h_tr1.Scale(1. / self.n_events_data)
+        h_tr1.Scale(1. / h_tr1.GetEntries())
         h_tr1.SetLineWidth(3)
 
         h_tr1_mc.SetMaximum(max(h_tr1_mc.GetBinContent(h_tr1_mc.GetMaximumBin()), h_tr1.GetBinContent(h_tr1.GetMaximumBin())) + 0.01)
@@ -242,12 +322,12 @@ class Detector:
         canvas.Write('tr1_res111')
 
         h_tr2_mc.Draw('histo')
-        h_tr2_mc.Scale(1. / self.n_events_mc)
+        h_tr2_mc.Scale(1. / h_tr2_mc.GetEntries())
 
         h_tr2_mc.SetFillColor(5)
 
         h_tr2.Draw('histosame')
-        h_tr2.Scale(1. / self.n_events_data)
+        h_tr2.Scale(1. / h_tr2.GetEntries())
         h_tr2.SetLineWidth(3)
 
         h_tr2_mc.SetMaximum(max(h_tr2_mc.GetBinContent(h_tr2_mc.GetMaximumBin()), h_tr2.GetBinContent(h_tr2.GetMaximumBin())) + 0.01)
@@ -255,17 +335,18 @@ class Detector:
         canvas.Write('tr2_res111')
 
         h_cal_mc.Draw('histo')
-        h_cal_mc.Scale(1. / self.n_events_mc)
+        h_cal_mc.Scale(1. / h_cal_mc.GetEntries())
 
         h_cal_mc.SetFillColor(5)
 
         h_cal.Draw('histosame')
-        h_cal.Scale(1. / self.n_events_data)
+        h_cal.Scale(1. / h_cal.GetEntries())
         h_cal.SetLineWidth(3)
 
         h_cal_mc.SetMaximum(max(h_cal_mc.GetBinContent(h_cal_mc.GetMaximumBin()), h_cal.GetBinContent(h_cal.GetMaximumBin())) + 0.01)
         canvas.BuildLegend()
         canvas.Write('cal_res111')
+
 
     def distance_between_clusters(self, det, clst1, clst2):
         canvas = TCanvas('distance_between_clusters', 'distance between clusters', 1024, 1024)
@@ -1268,30 +1349,36 @@ def shower_distances(data):
 
 def main():
     # data.simple_event()
-    # data.number_of_bs_events()
     # data.w0_resolution()
+
+    Detector().energy_layer2()
+
+
     cal = Calorimeter()
+    # cal.number_of_bs_events()
+    cal.e_ratio_tr2_tr1()
+
     # cal.x()
     # cal.y()
     # cal.layer()
     # cal.n_clusters()
     # cal.n_pads()
-    # cal.energy()
+    cal.energy()
     # cal.backscattered_tracks()
 
-    cal.clusters_distance_ratio()
+    # cal.clusters_distance_ratio()
 
-    tr1 = Tracker1()
-    tr1.n_clusters()
-    tr1.bs_energy()
+    # tr1 = Tracker1()
+    # tr1.n_clusters()
+    # tr1.bs_energy()
     # tr1.distance_to_shower()
     # tr1.efficiency()
     # tr1.distance_to_shower_scattered()
     # tr1.all_clst_shower_distance()
 
-    tr2 = Tracker2()
-    tr2.n_clusters()
-    tr2.bs_energy()
+    # tr2 = Tracker2()
+    # tr2.n_clusters()
+    # tr2.bs_energy()
     # tr2.distance_to_shower()
     # tr2.efficiency()
     # tr2.distance_to_shower_scattered()
@@ -1302,6 +1389,5 @@ def main():
 
 gROOT.SetBatch(1)
 gROOT.SetStyle('ATLAS')
-gStyle.SetOptStat(1110)
 
 main()

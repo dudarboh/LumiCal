@@ -3,7 +3,7 @@ import array
 import time
 import math
 import random
-from objects import Hit, HitMC, Tower, clustering
+from store_file import Hit, HitMC, Tower, clustering, bad_pad
 
 
 def extract_hits(event):
@@ -29,12 +29,16 @@ def extract_hits(event):
 
         hit = Hit(id_arr[i], channel_arr[i], signal_arr[i])
 
-        if (hit.sector == 0 or hit.sector == 3 or hit.layer == 7 or hit.pad < 0
+        if (hit.sector == 0
+           or hit.sector == 3
+           or hit.layer == 7
+           or hit.pad < 0
+           or hit.sector < 0  # This one is changed due to python C++ difference in %
            or (hit.sector == 1 and hit.pad < 20)
            or (hit.sector == 2 and hit.pad < 20)
-           or hit.sector < 0  # This one is changed due to python C++ difference in %.
            or (hit.layer < 2 and (signal_arr[i] < 0. or apv_nn_output[i] < 0.5))
-           or (hit.layer >= 2 and (hit.energy < 1.4 or apv_nn_output[i] < 0.5))):
+           or (hit.layer >= 2 and (hit.energy < 1.4 or apv_nn_output[i] < 0.5))
+           or bad_pad(hit.sector, hit.pad, hit.layer)):
             continue
 
         if hit.layer == 0:
@@ -61,15 +65,15 @@ def extract_mc(event):
 
     # +177.2 is to convert y from montecarto to my coordinate system
     x_tr1 = vx + px * z_tr1 / pz
-    y_tr1 = vy + py * z_tr1 / pz + 176.3 + 0.9
+    y_tr1 = vy + py * z_tr1 / pz + 177.2
     rho_tr1 = (x_tr1**2 + y_tr1**2)**0.5
 
     x_tr2 = vx + px * z_tr2 / pz
-    y_tr2 = vy + py * z_tr2 / pz + 176.3 + 0.9
+    y_tr2 = vy + py * z_tr2 / pz + 177.2
     rho_tr2 = (x_tr2**2 + y_tr2**2)**0.5
 
     x_cal = vx + px * z_cal / pz
-    y_cal = vy + py * z_cal / pz + 176.3 + 0.9
+    y_cal = vy + py * z_cal / pz + 177.2
     rho_cal = (x_cal**2 + y_cal**2)**0.5
 
     true_hits = [(x_tr1, y_tr1, rho_tr1), (x_tr2, y_tr2, rho_tr2), (x_cal, y_cal, rho_cal)]
@@ -80,26 +84,28 @@ def extract_mc(event):
     hits_tracker2 = []
 
     for i in range(n_hits):
-        # mev2mip = 1. / 0.0885 / 9.17112e-01
-        mev2mip = 1. / 0.0885
 
         cell_id = event.GetLeaf("Hits.cellID").GetValue(i)
         energy = event.GetLeaf("Hits.eHit").GetValue(i)
-        energy *= mev2mip
+
+        hit = HitMC(cell_id, energy)
 
         S0 = 0.819
         p1 = 2.166
         p0 = 0.999 / 2.
-        if random.random() > (1 + math.erf((energy - S0) / p1)) * p0 and (((int(cell_id) >> 16) & 0xff) - 1) > 1:
+
+        if random.random() > (1 + math.erf((hit.energy - S0) / p1)) * p0 and hit.layer > 1:
             continue
 
-        hit = HitMC(cell_id, energy)
-
-        if (hit.sector <= 0 or hit.sector == 3 or hit.layer == 7
+        if (hit.sector == 0
+           or hit.sector == 3
+           or hit.layer == 7
            or hit.pad < 0
+           or hit.sector < 0
            or (hit.sector == 1 and hit.pad < 20)
            or (hit.sector == 2 and hit.pad < 20)
-           or (hit.layer >= 2 and hit.energy < 1.4)):
+           or (hit.layer >= 2 and hit.energy < 1.4)
+           or bad_pad(hit.sector, hit.pad, hit.layer)):
             continue
 
         if hit.layer == 0:
@@ -400,5 +406,5 @@ def main(data_type, merge_type):
     output_file.Close()
 
 
+# main('data', merge_type='on')
 main('mc', merge_type='on')
-main('mc', merge_type='off')

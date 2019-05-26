@@ -1,6 +1,8 @@
 '''
-## coverts APV's channel to it's pad position (id) by the following scheme:
-Sectors:
+This file includes information for the LumiCal TestBeam2016:
+###APV maps###
+APV's channel -> pad id:
+
      0           1         2         3
  _________________________________________
 |   63     |    127   |   191   |   255   |
@@ -15,6 +17,16 @@ Sectors:
 
          |  0  |  64 | 128 | 192 |
          |_____|_____|_____|_____|
+#######
+
+###CalibFiles###
+Energy calibration files for APVs
+######
+
+###Hit###
+Hit object with certain position and energy
+######
+
 Number of APVs: 16
 Number of channels of one APV: 128
 Number of layers in experiment: 6(7) 0,1 - trackers, >2 - calorimeter
@@ -23,6 +35,7 @@ Number of pads in one sector: 64
 '''
 from ROOT import TGraphErrors, TMath
 import numpy as np
+import random
 from itertools import islice
 
 
@@ -113,12 +126,14 @@ class Hit:
     def __init__(self, apv_id, apv_channel, apv_signal):
         self.sector, self.pad, self.layer = self.position(apv_id, apv_channel)
         self.energy = self.calib_energy(apv_id, apv_signal)
-        if self.layer == 0:
-            pos_align = 0.1897
-        elif self.layer == 1:
-            pos_align = -0.9405
-        elif self.layer > 1:
-            pos_align = 0.7501
+
+        pos_align = 0
+        # if self.layer == 0:
+        #     pos_align = 0.1897
+        # elif self.layer == 1:
+        #     pos_align = -0.9405
+        # elif self.layer > 1:
+        #     pos_align = 0.7501
 
         self.rho = 80. + 0.9 + 1.8 * self.pad + pos_align
         self.phi = np.pi / 2 + np.pi / 12 - np.pi / 48 - np.pi / 24 * self.sector
@@ -127,17 +142,14 @@ class Hit:
 
     def position(self, apv_id, apv_channel):
         if apv_id < 4:
-            if apv_id % 2 == 1:
-                apv_map = ApvMaps.tb15_slave
-            else:
-                apv_map = ApvMaps.tb15_master
+            apv_map = ApvMaps.tb15_slave if apv_id % 2 == 1 else ApvMaps.tb15_master
+
         elif apv_id >= 4 and apv_id < 14:
-            if apv_id % 2 == 1:
-                apv_map = ApvMaps.tb16_slave_divider
-            else:
-                apv_map = ApvMaps.tb16_master_divider
+            apv_map = ApvMaps.tb16_slave_divider if apv_id % 2 == 1 else ApvMaps.tb16_master_divider
+
         elif apv_id == 14:
             apv_map = ApvMaps.tb16_master_tab_divider
+
         elif apv_id == 15:
             apv_map = ApvMaps.tb16_slave_tab_divider
 
@@ -151,20 +163,17 @@ class Hit:
         calib_file = CalibFiles.calib_files[apv_id]
 
         x = [0.]
-        y = [0. * 16.5 * 1.164]
+        y = [0. * 18.986]
         x_err = [1.e-5]
-        y_err = [1.e-5 * 16.5 * 1.164]
-
-        # Calibration data in file written as (x,y,x_err,y_err) for each APV_id
+        y_err = [1.e-5 * 18.986]
+        # Calibration x-y data is inverted
+        # 18.6 comes from statement that mean of energy histo in layer2 should be the same as in MC
         with open(calib_file, 'r') as file:
             for line in islice(file, 1, None):
-                # Calibration x-y data is inverted
-                # Normalization D / MC according to L2  * 1.09#  / 4.3 divide when No CD
-                #  * 16.5 * 1.164 - is needed in order to get energy in MIPs.
                 x.append(float(line.split('  ')[1]))
-                y.append(float(line.split('  ')[0]) * 16.5 * 1.164)
+                y.append(float(line.split('  ')[0]) * 18.986)  # ##18.61
                 x_err.append(float(line.split('  ')[3]))
-                y_err.append(float(line.split('  ')[2]) * 16.5 * 1.164)
+                y_err.append(float(line.split('  ')[2]) * 18.986)
 
         x = np.array(x)
         y = np.array(y)
@@ -173,20 +182,21 @@ class Hit:
 
         graph = TGraphErrors(len(x), x, y, x_err, y_err)
 
-        if apv_signal > signal_treshold:
-            signal = signal_treshold
-        else:
-            signal = apv_signal
+        signal = signal_treshold if apv_signal > signal_treshold else apv_signal
 
         return graph.Eval(signal)
 
 
 class HitMC:
     def __init__(self, cell_id, energy):
+        mev2mip = 1. / 0.0885
         self.sector = ((int(cell_id) >> 8) & 0xff) - 11
         self.pad = int(cell_id) & 0xff
         self.layer = ((int(cell_id) >> 16) & 0xff) - 1
-        self.energy = energy
+        self.energy = energy * mev2mip
+
+        # Implement noise in progress
+        self.energy = random.gauss(self.energy, 0.52353509)
 
         self.rho = 80. + 0.9 + 1.8 * self.pad
         self.phi = np.pi / 2 + np.pi / 12 - np.pi / 48 - np.pi / 24 * self.sector
@@ -237,7 +247,7 @@ class Cluster:
 
     def get_position(self, pos_string):
         if sum(self.weights) == 0:
-            return -1
+            return -9999
         positions = [getattr(hit, pos_string) for hit in self.hits]
         return sum([pos * self.weights[idx] / sum(self.weights) for idx, pos in enumerate(positions)])
 
@@ -299,9 +309,9 @@ def merge_clusters(clusters, towers):
                 if cluster1 == cluster2:
                     continue
                 else:
-                    distance = abs(cluster1.pad - cluster2.pad)
+                    distance = abs(cluster1.y - cluster2.y)
                     ratio = cluster2.energy / cluster1.energy
-                    if distance < 5 or (distance < 20 and ratio < 0.1 - 0.1 / 20 * distance):
+                    if distance < 9. or (distance < 36. and ratio < 0.1 - 0.1 / 20 * distance):
                         cluster1.merge(cluster2)
                         clusters.remove(cluster2)
                         break
@@ -379,3 +389,17 @@ def langaufun(x, par):
         summ += fland * TMath.Gaus(x[0], xx, par[3])
 
     return par[2] * step * summ * invsq2pi / par[3]
+
+
+def bad_pad(sector, pad, layer):
+    return ((layer == 0 and sector == 1 and pad in (26, 61))
+            or (layer == 0 and sector == 2 and pad in (31, 57, 61))
+            or (layer == 2 and sector == 1 and pad in (28, 31, 34))
+            or (layer == 2 and sector == 2 and pad in (38, 53))
+            or (layer == 3 and sector == 2 and pad in (31, 33, 52, 55, 61))
+            or (layer == 4 and sector == 1 and pad in (29, 39, 41, 55, 56))
+            or (layer == 4 and sector == 2 and pad in (28,))
+            or (layer == 5 and sector == 1 and pad in (32, 36, 40, 41, 44, 45, 49, 56, 58))
+            or (layer == 5 and sector == 2 and pad in (28, 52, 54, 61))
+            or (layer == 6 and sector == 1 and pad in (26, 30))
+            or (layer == 6 and sector == 2 and pad in (34, 42, 54, 57, 59, 60)))
