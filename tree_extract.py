@@ -3,7 +3,7 @@ import array
 import time
 import math
 import random
-from store_file import Hit, HitMC, Tower, clustering, bad_pad
+from store_file import Hit, HitMC, set_towers, set_clusters, bad_pad
 
 
 def extract_hits(event):
@@ -86,14 +86,14 @@ def extract_mc(event):
     for i in range(n_hits):
 
         cell_id = event.GetLeaf("Hits.cellID").GetValue(i)
-        energy = event.GetLeaf("Hits.eHit").GetValue(i)
+        energy_in_mev = event.GetLeaf("Hits.eHit").GetValue(i)
 
-        hit = HitMC(cell_id, energy)
+        hit = HitMC(cell_id, energy_in_mev)
 
+        # Calorimeter efficiency simulation
         S0 = 0.819
         p1 = 2.166
         p0 = 0.999 / 2.
-
         if random.random() > (1 + math.erf((hit.energy - S0) / p1)) * p0 and hit.layer > 1:
             continue
 
@@ -118,30 +118,18 @@ def extract_mc(event):
     return hits_tracker1, hits_tracker2, hits_calorimeter, true_hits
 
 
-def extract_towers(hits):
-    towers_pos = set([(hit.sector, hit.pad) for hit in hits])
-    towers = []
-    for pos in towers_pos:
-        tower_hits = [hit for hit in hits if (hit.sector, hit.pad) == pos]
-        towers.append(Tower(tower_hits))
-
-    towers = sorted(towers, key=lambda x: x.energy, reverse=True)
-
-    return towers
-
-
-def main(data_type, merge_type):
+def main(data_type):
     start_time = time.time()
 
     if data_type == 'data':
-        file = TFile.Open('./trees/run741_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root')
+        file = TFile.Open('./trees_raw/run741_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root')
         tree = file.apv_reco
-        output_file = TFile('extracted_data_merge_{}.root'.format(merge_type), 'recreate')
+        output_file = TFile('extracted_data.root', 'recreate')
         output_tree = TTree('data', 'Extracted Data')
     elif data_type == 'mc':
-        file = TFile.Open('./trees/mc/T16NST5G_22_03-11_16outputfile.root')
+        file = TFile.Open('./trees_raw/mc/T16NST5G_22_03-11_16outputfile.root')
         tree = file.Lcal
-        output_file = TFile('extracted_mc_merge_{}.root'.format(merge_type), 'recreate')
+        output_file = TFile('extracted_mc.root', 'recreate')
         output_tree = TTree('mc', 'Extracted MC')
 
     n_events = tree.GetEntries()
@@ -318,17 +306,17 @@ def main(data_type, merge_type):
             cal_true_hit_y[0] = true_hits[2][1]
             cal_true_hit_rho[0] = true_hits[2][2]
 
-        towers_tr1 = extract_towers(hits_tr1)
-        towers_tr2 = extract_towers(hits_tr2)
-        towers_cal = extract_towers(hits_cal)
+        towers_tr1 = set_towers(hits_tr1)
+        towers_tr2 = set_towers(hits_tr2)
+        towers_cal = set_towers(hits_cal)
 
-        clusters_tr1 = clustering(towers_tr1, merge='off', det='Tr1')
-        clusters_tr2 = clustering(towers_tr2, merge='off', det='Tr2')
-        clusters_cal = clustering(towers_cal, merge=merge_type, det='Cal')
+        clusters_tr1 = set_clusters(towers_tr1, det='Tr1')
+        clusters_tr2 = set_clusters(towers_tr2, det='Tr2')
+        clusters_cal = set_clusters(towers_cal, det='Cal')
 
         if len(clusters_cal) != 0:
-            clusters_tr1 = sorted(clusters_tr1, key=lambda x: abs(x.rho - clusters_cal[0].rho))
-            clusters_tr2 = sorted(clusters_tr2, key=lambda x: abs(x.rho - clusters_cal[0].rho))
+            clusters_tr1.sort(key=lambda x: abs(x.rho - clusters_cal[0].rho))
+            clusters_tr2.sort(key=lambda x: abs(x.rho - clusters_cal[0].rho))
 
         tr1_n_hits[0] = len(hits_tr1)
         for i, hit in enumerate(hits_tr1):
@@ -406,5 +394,5 @@ def main(data_type, merge_type):
     output_file.Close()
 
 
-# main('data', merge_type='on')
-main('mc', merge_type='on')
+main('data')
+main('mc')

@@ -6,13 +6,11 @@ from store_file import langaufun
 
 class Detector:
     output_file = TFile('RENAME.root', 'recreate')
-    file_data = TFile.Open('./trees/extracted_data_merge_on.root', 'read')
+    file_data = TFile.Open('./trees/extracted_data.root', 'read')
     tree_data = file_data.data
-    tree_data.AddFriend('nomerge = data', './trees/extracted_data_merge_off.root')
 
-    file_mc = TFile.Open('./trees/extracted_mc_merge_on.root', 'read')
+    file_mc = TFile.Open('./trees/extracted_mc.root', 'read')
     tree_mc = file_mc.mc
-    tree_mc.AddFriend('nomerge = mc', './trees/extracted_mc_merge_off.root')
 
     def __init__(self):
         self.output_file.cd()
@@ -347,7 +345,6 @@ class Detector:
         canvas.BuildLegend()
         canvas.Write('cal_res111')
 
-
     def distance_between_clusters(self, det, clst1, clst2):
         canvas = TCanvas('distance_between_clusters', 'distance between clusters', 1024, 1024)
         n_bins = 128
@@ -465,7 +462,6 @@ class Detector:
 
 class Calorimeter(Detector):
 
-    # Newly made for presentation
     def y(self):
         canvas = TCanvas('shower_y', 'shower_y', 1024, 768)
         n_bins = 180
@@ -1323,11 +1319,6 @@ class Tracker2(Detector):
 
 
 def shower_distances(data):
-    '''
-    Calculate efficiency for Tr2 if Tr1 has signal
-    in range of +-"sigma" = 4.4 mm within shower in cal
-    '''
-
     # tr_number, cluster_number, tr1_n_clusters, tr2_n_clusters
     # 111
     data.shower_distance(1, 1, 1, 1)
@@ -1348,41 +1339,18 @@ def shower_distances(data):
 
 
 def main():
-    # data.simple_event()
-    # data.w0_resolution()
 
     Detector().energy_layer2()
-
+    Detector().e_ratio_tr2_tr1()
 
     cal = Calorimeter()
-    # cal.number_of_bs_events()
-    cal.e_ratio_tr2_tr1()
-
-    # cal.x()
-    # cal.y()
-    # cal.layer()
-    # cal.n_clusters()
-    # cal.n_pads()
     cal.energy()
-    # cal.backscattered_tracks()
 
-    # cal.clusters_distance_ratio()
+    tr1 = Tracker1()
+    tr1.n_clusters()
 
-    # tr1 = Tracker1()
-    # tr1.n_clusters()
-    # tr1.bs_energy()
-    # tr1.distance_to_shower()
-    # tr1.efficiency()
-    # tr1.distance_to_shower_scattered()
-    # tr1.all_clst_shower_distance()
-
-    # tr2 = Tracker2()
-    # tr2.n_clusters()
-    # tr2.bs_energy()
-    # tr2.distance_to_shower()
-    # tr2.efficiency()
-    # tr2.distance_to_shower_scattered()
-    # tr2.all_clst_shower_distance()
+    tr2 = Tracker2()
+    tr2.n_clusters()
 
     input('Yaay I am finished :3')
 

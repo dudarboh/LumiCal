@@ -40,6 +40,7 @@ from itertools import islice
 
 
 class ApvMaps:
+    ''' Maps of apv channels to pad number. Are taken from Sasha  analysis code'''
     tb15_master = [190 - i if i < 63 else i + 129 for i in range(127)] + [-1]
 
     tb15_slave = [-1, 62, 63, 60, 61, 58, 59, 56, 57, 54, 55, 52, 53, 50, 51,
@@ -111,15 +112,16 @@ class ApvMaps:
 
 
 class CalibFiles:
+    '''APV calibration. To convert Volts to MIPs'''
     # path on alzt.tau.ac.il server = '/data/alzta/aborysov/tb_2016_data/code/lumical_clust/fcalib/'
-    calib_files = ['../calibration/calibration_apv_0.txt', '../calibration/calibration_apv_1.txt',
-                   '../calibration/calibration_apv_2.txt', '../calibration/calibration_apv_3.txt',
-                   '../calibration/calibration_apv_4.txt', '../calibration/calibration_apv_5.txt',
-                   '../calibration/calibration_apv_6.txt', '../calibration/calibration_apv_7.txt',
-                   '../calibration/calibration_apv_8.txt', '../calibration/calibration_apv_9.txt',
-                   '../calibration/calibration_apv_10.txt', '../calibration/calibration_apv_11.txt',
-                   '../calibration/calibration_apv_12.txt', '../calibration/calibration_apv_13.txt',
-                   '../calibration/calibration_apv_14.txt', '../calibration/calibration_apv_15.txt']
+    calib_files = ['./calibration_files/calibration_apv_0.txt', './calibration_files/calibration_apv_1.txt',
+                   './calibration_files/calibration_apv_2.txt', './calibration_files/calibration_apv_3.txt',
+                   './calibration_files/calibration_apv_4.txt', './calibration_files/calibration_apv_5.txt',
+                   './calibration_files/calibration_apv_6.txt', './calibration_files/calibration_apv_7.txt',
+                   './calibration_files/calibration_apv_8.txt', './calibration_files/calibration_apv_9.txt',
+                   './calibration_files/calibration_apv_10.txt', './calibration_files/calibration_apv_11.txt',
+                   './calibration_files/calibration_apv_12.txt', './calibration_files/calibration_apv_13.txt',
+                   './calibration_files/calibration_apv_14.txt', './calibration_files/calibration_apv_15.txt']
 
 
 class Hit:
@@ -159,7 +161,6 @@ class Hit:
         return sector, pad, layer
 
     def calib_energy(self, apv_id, apv_signal):
-        signal_treshold = 1450.
         calib_file = CalibFiles.calib_files[apv_id]
 
         x = [0.]
@@ -182,20 +183,20 @@ class Hit:
 
         graph = TGraphErrors(len(x), x, y, x_err, y_err)
 
-        signal = signal_treshold if apv_signal > signal_treshold else apv_signal
+        signal = apv_signal if apv_signal < 1450. else 1450.
 
         return graph.Eval(signal)
 
 
 class HitMC:
-    def __init__(self, cell_id, energy):
+    def __init__(self, cell_id, energy_in_mev):
         mev2mip = 1. / 0.0885
         self.sector = ((int(cell_id) >> 8) & 0xff) - 11
         self.pad = int(cell_id) & 0xff
         self.layer = ((int(cell_id) >> 16) & 0xff) - 1
-        self.energy = energy * mev2mip
+        self.energy = energy_in_mev * mev2mip
 
-        # Implement noise in progress
+        # Implement noise in progress. Need to put not random number!
         self.energy = random.gauss(self.energy, 0.52353509)
 
         self.rho = 80. + 0.9 + 1.8 * self.pad
@@ -224,6 +225,8 @@ class Cluster:
         self.det = det
 
         self.energy = self.get_energy()
+
+        # Energies in trackers. LogW in Calorimeter
         self.weights = self.get_weights()
 
         self.pad = self.get_position('pad')
@@ -256,6 +259,8 @@ class Cluster:
 
     def merge(self, cluster2):
         self.hits += cluster2.hits
+        for tower2 in cluster2.towers:
+            tower2.cluster = self.towers[0].cluster
         self.towers += cluster2.towers
         self.energy = self.get_energy()
         self.weights = self.get_weights()
@@ -270,21 +275,31 @@ class Cluster:
         self.n_pads = self.get_n_pads()
 
 
+def set_towers(hits):
+    towers_pos = set([(hit.sector, hit.pad) for hit in hits])
+    towers = []
+    for pos in towers_pos:
+        tower_hits = [hit for hit in hits if (hit.sector, hit.pad) == pos]
+        towers.append(Tower(tower_hits))
+
+    towers.sort(key=lambda x: x.energy, reverse=True)
+
+    return towers
+
+
 def set_neighbors(towers):
     for tower in towers:
-        center_sec, center_pad = tower.sector, tower.pad
-        neighbors = []
+        most_energetic_neighbor = tower
 
         for tower_neighbor in towers:
-            if (tower_neighbor.sector in range(center_sec - 1, center_sec + 2)
-               and tower_neighbor.pad in range(center_pad - 1, center_pad + 2)):
-                neighbors.append(tower_neighbor)
+            if (tower_neighbor.sector in range(tower.sector - 1, tower.sector + 2)
+               and tower_neighbor.pad in range(tower.pad - 1, tower.pad + 2)):
+                most_energetic_neighbor = tower_neighbor if tower_neighbor.energy >= most_energetic_neighbor.energy else most_energetic_neighbor
 
-        neighbors_sorted = sorted(neighbors, key=lambda x: x.energy, reverse=True)
-        tower.neighbor = neighbors_sorted[0]
+        tower.neighbor = most_energetic_neighbor
 
 
-def set_clusters(towers):
+def set_tower_clusters(towers):
     cluster_idx = 0
     for tower in towers:
         if (tower.neighbor.sector, tower.neighbor.pad) == (tower.sector, tower.pad):
@@ -301,14 +316,12 @@ def set_clusters(towers):
                     tower.cluster = tower.neighbor.cluster
 
 
-def merge_clusters(clusters, towers):
+def merge_clusters(clusters):
     restart = True
     while restart:
         for idx1, cluster1 in enumerate(clusters):
             for idx2, cluster2 in enumerate(clusters):
-                if cluster1 == cluster2:
-                    continue
-                else:
+                if cluster1 != cluster2:
                     distance = abs(cluster1.y - cluster2.y)
                     ratio = cluster2.energy / cluster1.energy
                     if distance < 9. or (distance < 36. and ratio < 0.1 - 0.1 / 20 * distance):
@@ -322,14 +335,14 @@ def merge_clusters(clusters, towers):
             restart = False
 
 
-def clustering(towers, merge, det):
+def set_clusters(towers, det):
     clusters = []
 
     if len(towers) == 0:
         return clusters
 
     set_neighbors(towers)
-    set_clusters(towers)
+    set_tower_clusters(towers)
 
     n_clusters = max([tower.cluster for tower in towers]) + 1
     for cluster in range(n_clusters):
@@ -341,20 +354,19 @@ def clustering(towers, merge, det):
                 cluster_towers.append(tower)
         clusters.append(Cluster(cluster_hits, cluster_towers, det))
 
-    clusters = sorted(clusters, key=lambda x: x.energy, reverse=True)
+    clusters.sort(key=lambda x: x.energy, reverse=True)
+
     for i, cluster in enumerate(clusters):
         for tower in cluster.towers:
-            if tower.cluster != i:
-                tower.cluster = i
+            tower.cluster = i
 
-    if merge == 'on':
-        merge_clusters(clusters, towers)
+    merge_clusters(clusters)
 
-    clusters = sorted(clusters, key=lambda x: x.energy, reverse=True)
+    clusters.sort(key=lambda x: x.energy, reverse=True)
+
     for i, cluster in enumerate(clusters):
         for tower in cluster.towers:
-            if tower.cluster != i:
-                tower.cluster = i
+            tower.cluster = i
 
     return clusters
 
