@@ -118,6 +118,18 @@ def extract_mc(event):
     return hits_tracker1, hits_tracker2, hits_calorimeter, true_hits
 
 
+def align_detector(hits_tr1, hits_tr2, hits_cal):
+    tr1_shift = -0.16287581540422025
+    tr2_shift = 0.9707477456103106
+    cal_shift = -0.807871930206062
+    for hit in hits_tr1:
+        hit.y -= tr1_shift
+    for hit in hits_tr2:
+        hit.y -= tr2_shift
+    for hit in hits_cal:
+        hit.y -= cal_shift
+
+
 def main(data_type):
     start_time = time.time()
 
@@ -127,7 +139,7 @@ def main(data_type):
         output_file = TFile('extracted_data.root', 'recreate')
         output_tree = TTree('data', 'Extracted Data')
     elif data_type == 'mc':
-        file = TFile.Open('./trees_raw/mc/T16NST5G_22_03-11_16outputfile.root')
+        file = TFile.Open('./trees_raw/T16NST5G_22_03-11_16outputfile.root')
         tree = file.Lcal
         output_file = TFile('extracted_mc.root', 'recreate')
         output_tree = TTree('mc', 'Extracted MC')
@@ -294,6 +306,8 @@ def main(data_type):
         # Extract data.
         if data_type == 'data':
             hits_tr1, hits_tr2, hits_cal = extract_hits(event)
+            align_detector(hits_tr1, hits_tr2, hits_cal)
+
         elif data_type == 'mc':
             hits_tr1, hits_tr2, hits_cal, true_hits = extract_mc(event)
             tr1_true_hit_x[0] = true_hits[0][0]
@@ -313,6 +327,7 @@ def main(data_type):
         clusters_tr1 = set_clusters(towers_tr1, det='Tr1')
         clusters_tr2 = set_clusters(towers_tr2, det='Tr2')
         clusters_cal = set_clusters(towers_cal, det='Cal')
+
 
         if len(clusters_cal) != 0:
             clusters_tr1.sort(key=lambda x: abs(x.rho - clusters_cal[0].rho))
@@ -394,5 +409,5 @@ def main(data_type):
     output_file.Close()
 
 
-main('data')
+#main('data')
 main('mc')

@@ -1,3 +1,12 @@
+'''
+TODO list:
+
+1) Check alignment
+2) Check layer2 energy data/MC for calibration factor
+3) Check x,y,e,n_clst to check is everything ok?
+4) Back-scattering analysis vs beam energy
+'''
+
 from ROOT import TFile, gROOT, TGraphErrors, TH1F, TGraph, TCanvas, TPad, TF1, gStyle
 import numpy as np
 import array
@@ -5,15 +14,40 @@ from store_file import langaufun
 
 
 class Detector:
-    output_file = TFile('RENAME.root', 'recreate')
-    file_data = TFile.Open('./trees/extracted_data.root', 'read')
+    output_file = TFile('histos.root', 'recreate')
+    file_data = TFile.Open('./trees_result/extracted_data.root', 'read')
     tree_data = file_data.data
 
-    file_mc = TFile.Open('./trees/extracted_mc.root', 'read')
+    file_mc = TFile.Open('./trees_result/extracted_mc.root', 'read')
     tree_mc = file_mc.mc
 
     def __init__(self):
         self.output_file.cd()
+
+    @classmethod
+    def check_alignment(cls):
+        x = np.array([0., 5 * 4.5, 25 * 4.5])
+
+        cuts = "tr1_n_clusters == 1 && tr2_n_clusters == 1 && cal_n_clusters == 1 && 153.1 < cal_cluster_y[0] && cal_cluster_y[0] < 172.3"
+
+        cls.tree_data.Draw('tr1_cluster_y[0]>>h_tr1(64, 80, 195.2)', cuts)
+        h_tr1 = gROOT.FindObject('h_tr1')
+        y_tr1 = h_tr1.GetMean()
+
+        cls.tree_data.Draw('tr2_cluster_y[0]>>h_tr2(64, 80, 195.2)', cuts)
+        h_tr2 = gROOT.FindObject('h_tr2')
+        y_tr2 = h_tr2.GetMean()
+
+        cls.tree_data.Draw('cal_cluster_y[0]>>h_cal(64, 80, 195.2)', cuts)
+        h_cal = gROOT.FindObject('h_cal')
+        y_cal = h_cal.GetMean()
+
+        track = TGraphErrors(3, x, np.array([y_tr1, y_tr2, y_cal]))
+        track.Fit('pol0', "Q")
+        fit_func = track.GetFunction('pol0')
+        print("Tr1 needs alignment for:", y_tr1 - fit_func.Eval(0))
+        print("Tr2 needs alignment for:", y_tr2 - fit_func.Eval(0))
+        print("Cal needs alignment for:", y_cal - fit_func.Eval(0))
 
     @classmethod
     def backscattered_tracks(cls):
@@ -275,73 +309,78 @@ class Detector:
                     and 153.1 < event.cal_cluster_rho[0] < 172.3):
                 continue
 
-            rho = np.array([event.tr1_cluster_rho[0], event.tr2_cluster_rho[0], event.cal_cluster_rho[0]])
+            rho = np.array([event.tr1_cluster_y[0], event.tr2_cluster_y[0], event.cal_cluster_y[0]])
             track = TGraphErrors(3, z, rho, z_err, rho_err)
             track.Fit('pol0', "Q")
             fit_func = track.GetFunction('pol0')
 
-            tr1_residual = event.tr1_cluster_rho[0] - fit_func.Eval(z_tr1)
-            tr2_residual = event.tr2_cluster_rho[0] - fit_func.Eval(z_tr2)
-            cal_residual = event.cal_cluster_rho[0] - fit_func.Eval(z_cal)
+            tr1_residual = event.tr1_cluster_y[0] - fit_func.Eval(z_tr1)
+            tr2_residual = event.tr2_cluster_y[0] - fit_func.Eval(z_tr2)
+            cal_residual = event.cal_cluster_y[0] - fit_func.Eval(z_cal)
             h_tr1.Fill(tr1_residual)
             h_tr2.Fill(tr2_residual)
             h_cal.Fill(cal_residual)
 
-        for event in cls.tree_mc:
-            if not (event.tr1_n_clusters == 1
-                    and event.tr2_n_clusters == 1
-                    and event.cal_n_clusters == 1
-                    and 153.1 < event.cal_cluster_rho[0] < 172.3):
-                continue
+        # for event in cls.tree_mc:
+        #     if not (event.tr1_n_clusters == 1
+        #             and event.tr2_n_clusters == 1
+        #             and event.cal_n_clusters == 1
+        #             and 153.1 < event.cal_cluster_rho[0] < 172.3):
+        #         continue
 
-            rho = np.array([event.tr1_cluster_rho[0], event.tr2_cluster_rho[0], event.cal_cluster_rho[0]])
-            track = TGraphErrors(3, z, rho, z_err, rho_err)
-            track.Fit('pol0', "Q")
-            fit_func = track.GetFunction('pol0')
+        #     rho = np.array([event.tr1_cluster_y[0], event.tr2_cluster_y[0], event.cal_cluster_y[0]])
+        #     track = TGraphErrors(3, z, rho, z_err, rho_err)
+        #     track.Fit('pol0', "Q")
+        #     fit_func = track.GetFunction('pol0')
 
-            tr1_residual = event.tr1_cluster_rho[0] - fit_func.Eval(z_tr1)
-            tr2_residual = event.tr2_cluster_rho[0] - fit_func.Eval(z_tr2)
-            cal_residual = event.cal_cluster_rho[0] - fit_func.Eval(z_cal)
-            h_tr1_mc.Fill(tr1_residual)
-            h_tr2_mc.Fill(tr2_residual)
-            h_cal_mc.Fill(cal_residual)
+        #     tr1_residual = event.tr1_cluster_rho[0] - fit_func.Eval(z_tr1)
+        #     tr2_residual = event.tr2_cluster_rho[0] - fit_func.Eval(z_tr2)
+        #     cal_residual = event.cal_cluster_rho[0] - fit_func.Eval(z_cal)
+        #     h_tr1_mc.Fill(tr1_residual)
+        #     h_tr2_mc.Fill(tr2_residual)
+        #     h_cal_mc.Fill(cal_residual)
 
-        h_tr1_mc.Draw('histo')
-        h_tr1_mc.Scale(1. / h_tr1_mc.GetEntries())
+        # h_tr1_mc.Draw('histo')
+        # h_tr1_mc.Scale(1. / h_tr1_mc.GetEntries())
 
-        h_tr1_mc.SetFillColor(5)
+        # h_tr1_mc.SetFillColor(5)
 
-        h_tr1.Draw('histosame')
+        h_tr1.Draw('histo')
+        print('Tr1_event_per_event:', h_tr1.GetMean())
         h_tr1.Scale(1. / h_tr1.GetEntries())
         h_tr1.SetLineWidth(3)
 
-        h_tr1_mc.SetMaximum(max(h_tr1_mc.GetBinContent(h_tr1_mc.GetMaximumBin()), h_tr1.GetBinContent(h_tr1.GetMaximumBin())) + 0.01)
+        # h_tr1_mc.SetMaximum(max(h_tr1_mc.GetBinContent(h_tr1_mc.GetMaximumBin()), h_tr1.GetBinContent(h_tr1.GetMaximumBin())) + 0.01)
         canvas.BuildLegend()
         canvas.Write('tr1_res111')
 
-        h_tr2_mc.Draw('histo')
-        h_tr2_mc.Scale(1. / h_tr2_mc.GetEntries())
+        # # h_tr2_mc.Draw('histo')
+        # h_tr2_mc.Scale(1. / h_tr2_mc.GetEntries())
 
-        h_tr2_mc.SetFillColor(5)
+        # h_tr2_mc.SetFillColor(5)
 
-        h_tr2.Draw('histosame')
+        h_tr2.Draw('histo')
+        print('Tr2_event_per_event:', h_tr2.GetMean())
+
         h_tr2.Scale(1. / h_tr2.GetEntries())
         h_tr2.SetLineWidth(3)
 
-        h_tr2_mc.SetMaximum(max(h_tr2_mc.GetBinContent(h_tr2_mc.GetMaximumBin()), h_tr2.GetBinContent(h_tr2.GetMaximumBin())) + 0.01)
+        # h_tr2_mc.SetMaximum(max(h_tr2_mc.GetBinContent(h_tr2_mc.GetMaximumBin()), h_tr2.GetBinContent(h_tr2.GetMaximumBin())) + 0.01)
         canvas.BuildLegend()
         canvas.Write('tr2_res111')
 
-        h_cal_mc.Draw('histo')
-        h_cal_mc.Scale(1. / h_cal_mc.GetEntries())
+        # h_cal_mc.Draw('histo')
+        # h_cal_mc.Scale(1. / h_cal_mc.GetEntries())
 
-        h_cal_mc.SetFillColor(5)
+        # h_cal_mc.SetFillColor(5)
 
-        h_cal.Draw('histosame')
+        h_cal.Draw('histo')
+        print('Cal_event_per_event:', h_cal.GetMean())
+
         h_cal.Scale(1. / h_cal.GetEntries())
         h_cal.SetLineWidth(3)
 
-        h_cal_mc.SetMaximum(max(h_cal_mc.GetBinContent(h_cal_mc.GetMaximumBin()), h_cal.GetBinContent(h_cal.GetMaximumBin())) + 0.01)
+        # h_cal_mc.SetMaximum(max(h_cal_mc.GetBinContent(h_cal_mc.GetMaximumBin()), h_cal.GetBinContent(h_cal.GetMaximumBin())) + 0.01)
         canvas.BuildLegend()
         canvas.Write('cal_res111')
 
@@ -1340,17 +1379,19 @@ def shower_distances(data):
 
 def main():
 
-    Detector().energy_layer2()
-    Detector().e_ratio_tr2_tr1()
+    Detector().check_alignment()
+    Detector().residuals_111()
+    # Detector().energy_layer2()
+    # Detector().e_ratio_tr2_tr1()
 
-    cal = Calorimeter()
-    cal.energy()
+    # cal = Calorimeter()
+    # cal.energy()
 
-    tr1 = Tracker1()
-    tr1.n_clusters()
+    # tr1 = Tracker1()
+    # tr1.n_clusters()
 
-    tr2 = Tracker2()
-    tr2.n_clusters()
+    # tr2 = Tracker2()
+    # tr2.n_clusters()
 
     input('Yaay I am finished :3')
 

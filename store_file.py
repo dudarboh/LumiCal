@@ -128,17 +128,9 @@ class Hit:
     def __init__(self, apv_id, apv_channel, apv_signal):
         self.sector, self.pad, self.layer = self.position(apv_id, apv_channel)
         self.energy = self.calib_energy(apv_id, apv_signal)
-
-        pos_align = 0
-        # if self.layer == 0:
-        #     pos_align = 0.1897
-        # elif self.layer == 1:
-        #     pos_align = -0.9405
-        # elif self.layer > 1:
-        #     pos_align = 0.7501
-
-        self.rho = 80. + 0.9 + 1.8 * self.pad + pos_align
+        self.rho = 80. + 0.9 + 1.8 * self.pad
         self.phi = np.pi / 2 + np.pi / 12 - np.pi / 48 - np.pi / 24 * self.sector
+
         self.x = self.rho * np.cos(self.phi)
         self.y = self.rho * np.sin(self.phi)
 
