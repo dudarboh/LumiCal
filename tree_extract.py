@@ -409,5 +409,5 @@ def main(data_type):
     output_file.Close()
 
 
-#main('data')
-main('mc')
+main('data')
+# main('mc')
