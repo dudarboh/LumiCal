@@ -22,10 +22,10 @@ from store_file import langaufun
 
 
 class Detector:
-    file_data = TFile.Open('./trees_result/extracted_data.root', 'read')
+    file_data = TFile.Open('./result_trees/extracted_data.root', 'read')
     tree_data = file_data.data
 
-    file_mc = TFile.Open('./trees_result/extracted_mc.root', 'read')
+    file_mc = TFile.Open('./result_trees/extracted_mc.root', 'read')
     tree_mc = file_mc.mc
 
     output_file = TFile('histos.root', 'recreate')

@@ -130,13 +130,13 @@ def align_detector(hits_tr1, hits_tr2, hits_cal):
         hit.y -= cal_shift
 
 
-def main(data_type):
+def main(filename, data_type):
     start_time = time.time()
 
     if data_type == 'data':
-        file = TFile.Open('./trees_raw/run741_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root')
+        file = TFile.Open('./tb16_cd_nn_reg9_nocm_corr_wfita_reco/' + filename)
         tree = file.apv_reco
-        output_file = TFile('extracted_data.root', 'recreate')
+        output_file = TFile('./result_trees/extracted_' + filename, 'recreate')
         output_tree = TTree('data', 'Extracted Data')
     elif data_type == 'mc':
         file = TFile.Open('./trees_raw/T16NST5G_22_03-11_16outputfile.root')
@@ -409,5 +409,9 @@ def main(data_type):
     output_file.Close()
 
 
-main('data')
+main('run741_5gev.root', 'data')
+main('run742_4gev.root', 'data')
+main('run745_3gev.root', 'data')
+main('run747_2gev.root', 'data')
+main('run750_1gev.root', 'data')
 # main('mc')
