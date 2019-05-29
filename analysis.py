@@ -8,11 +8,11 @@ TODO list:
 ---
 1) Get files
 2) What distributions do i want?
-    All hits to distance to shower 5 graphs for each energy
-    % of hits that are potential backscattered - graph
-    Energy distribution for trackers 5 graphs
-    Energy deposit in 1st layer of cal. vs energy beam
-    Energy in 1st layer vs number of bs hits
+2.1)All hits to distance to shower 5 graphs for each energy - nothing is seen at all
+2.2)% of hits that are potential backscattered - graph
+2.3)Energy distribution for trackers 5 graphs
+2.4)Energy deposit in 1st layer of cal. vs energy beam
+2.5)Energy in 1st layer vs number of bs hits
 '''
 
 from ROOT import TFile, gROOT, TGraphErrors, TH1F, TGraph, TCanvas, TPad, TF1, gStyle
@@ -25,8 +25,8 @@ class Detector:
     file_data = TFile.Open('./result_trees/extracted_data.root', 'read')
     tree_data = file_data.data
 
-    file_mc = TFile.Open('./result_trees/extracted_mc.root', 'read')
-    tree_mc = file_mc.mc
+    # file_mc = TFile.Open('./result_trees/extracted_mc.root', 'read')
+    # tree_mc = file_mc.mc
 
     output_file = TFile('histos.root', 'recreate')
 
@@ -65,8 +65,8 @@ class Detector:
         first = 0
         last = 200
 
-        cls.tree_data.Draw('Sum$(cal_hit_energy*(cal_hit_layer == 2))>>h_data({}, {}, {})'.format(n_bins, first, last))
-        cls.tree_mc.Draw('Sum$(cal_hit_energy*(cal_hit_layer == 2))>>h_mc({}, {}, {})'.format(n_bins, first, last))
+        cls.tree_data.Draw('Sum$(cal_hit_energy*(cal_hit_layer == 3))>>h_data({}, {}, {})'.format(n_bins, first, last))
+        cls.tree_mc.Draw('Sum$(cal_hit_energy*(cal_hit_layer == 3))>>h_mc({}, {}, {})'.format(n_bins, first, last))
         h_data = gROOT.FindObject('h_data')
         h_mc = gROOT.FindObject('h_mc')
 
@@ -156,14 +156,14 @@ class Detector:
         cuts_01 = 'tr1_n_clusters == 0 && tr2_n_clusters == 1 && cal_n_clusters == 1'
         cuts_00 = 'tr1_n_clusters == 0 && tr2_n_clusters == 0 && cal_n_clusters == 1'
 
-        self.tree_data.Draw('>>good_data', good_cut)
-        self.tree_data.Draw('>>h11_data', cuts_11)
-        self.tree_data.Draw('>>h12_data', cuts_12)
-        self.tree_data.Draw('>>h21_data', cuts_21)
-        self.tree_data.Draw('>>h22_data', cuts_22)
-        self.tree_data.Draw('>>h10_data', cuts_10)
-        self.tree_data.Draw('>>h01_data', cuts_01)
-        self.tree_data.Draw('>>h00_data', cuts_00)
+        cls.tree_data.Draw('>>good_data', good_cut)
+        cls.tree_data.Draw('>>h11_data', cuts_11)
+        cls.tree_data.Draw('>>h12_data', cuts_12)
+        cls.tree_data.Draw('>>h21_data', cuts_21)
+        cls.tree_data.Draw('>>h22_data', cuts_22)
+        cls.tree_data.Draw('>>h10_data', cuts_10)
+        cls.tree_data.Draw('>>h01_data', cuts_01)
+        cls.tree_data.Draw('>>h00_data', cuts_00)
 
         n_data_events = gROOT.FindObject('good_data').GetN()
         print('Total DATA Events:', n_data_events)
@@ -901,9 +901,6 @@ def main():
 
     # cal = Calorimeter()
     # cal.energy()
-
-    tr2 = Tracker(2)
-    tr2.all_clst_shower_distance()
 
     input('Yaay I am finished :3')
 
