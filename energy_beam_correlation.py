@@ -1,5 +1,5 @@
 
-from ROOT import TFile, gROOT, gDirectory, TGraphErrors, TCanvas, gStyle, nullptr
+from ROOT import TFile, gROOT, gDirectory, TGraphErrors, TCanvas, gStyle, nullptr, TH2F
 import numpy as np
 
 
@@ -191,15 +191,16 @@ class Calorimeter(Detector):
     def energy_1st_cal_layer_vs_beam_energy(self):
         name = 'energy_1st_cal_layer_vs_beam_energy'
         canvas = TCanvas(name, name, 1024, 768)
-        canvas_gr = TCanvas('e_in_1st__cal_layer_vs_beam_e', 'e_in_1st__cal_layer_vs_beam_e', 1024, 768)
         canvas.cd()
 
-        cuts = 'tr1_n_clusters == 1 && tr2_n_clusters == 1 '
-        self.tree_5gev.Draw('Sum$(cal_hit_energy*(cal_hit_layer == 2))>>h_5gev(100, 0, 150)', cuts)
-        self.tree_4gev.Draw('Sum$(cal_hit_energy*(cal_hit_layer == 2))>>h_4gev(100, 0, 150)', cuts)
-        self.tree_3gev.Draw('Sum$(cal_hit_energy*(cal_hit_layer == 2))>>h_3gev(100, 0, 150)', cuts)
-        self.tree_2gev.Draw('Sum$(cal_hit_energy*(cal_hit_layer == 2))>>h_2gev(100, 0, 150)', cuts)
-        self.tree_1gev.Draw('Sum$(cal_hit_energy*(cal_hit_layer == 2))>>h_1gev(100, 0, 150)', cuts)
+        histo = TH2F(name, name, 5, 0.5, 5.5, 50, 0, 150)
+
+        cuts = 'tr1_n_clusters == 1 && tr2_n_clusters == 1'
+        self.tree_5gev.Draw('Sum$(cal_hit_energy*(cal_hit_layer == 2))>>h_5gev(50, 0, 150)', cuts)
+        self.tree_4gev.Draw('Sum$(cal_hit_energy*(cal_hit_layer == 2))>>h_4gev(50, 0, 150)', cuts)
+        self.tree_3gev.Draw('Sum$(cal_hit_energy*(cal_hit_layer == 2))>>h_3gev(50, 0, 150)', cuts)
+        self.tree_2gev.Draw('Sum$(cal_hit_energy*(cal_hit_layer == 2))>>h_2gev(50, 0, 150)', cuts)
+        self.tree_1gev.Draw('Sum$(cal_hit_energy*(cal_hit_layer == 2))>>h_1gev(50, 0, 150)', cuts)
 
         h_5gev = gROOT.FindObject('h_5gev')
         h_4gev = gROOT.FindObject('h_4gev')
@@ -212,51 +213,31 @@ class Calorimeter(Detector):
         h_2gev.Scale(1. / self.tree_2gev.GetEntries())
         h_1gev.Scale(1. / self.tree_1gev.GetEntries())
 
-        histos = [h_1gev, h_2gev, h_3gev, h_4gev, h_5gev]
+        for i in range(1, 51):
+            histo.Fill(5, h_5gev.GetBinCenter(i), h_5gev.GetBinContent(i))
+            histo.Fill(4, h_4gev.GetBinCenter(i), h_4gev.GetBinContent(i))
+            histo.Fill(3, h_3gev.GetBinCenter(i), h_3gev.GetBinContent(i))
+            histo.Fill(2, h_2gev.GetBinCenter(i), h_2gev.GetBinContent(i))
+            histo.Fill(1, h_1gev.GetBinCenter(i), h_1gev.GetBinContent(i))
 
-        x = [1., 2., 3., 4., 5.]
-        y = [0, 0, 0, 0, 0]
-        y_err = [0, 0, 0, 0, 0]
-        for i, hist in enumerate(histos):
-            y[i] = hist.GetMean()
-            y_err[i] = hist.GetRMS()
-
-        for i, hist in enumerate(histos):
-            if (i == 0):
-                hist.Draw('histo')
-                hist.SetTitle("Beam energy 1 GeV")
-                hist.GetXaxis().SetTitle("Energy in 1st cal layer")
-                hist.GetYaxis().SetTitle("Events, %")
-                continue
-            hist.Draw('histosame')
-            hist.SetTitle("Beam energy {} GeV".format(i + 1))
-            hist.SetLineColor(i + 1)
-
-        canvas.BuildLegend()
-        histos[0].SetTitle(name)
-
-        canvas.Write(name)
-        graph = TGraphErrors(5, np.array(x), np.array(y), nullptr, np.array(y_err))
-        graph.SetTitle("Energy in 1st cal layer vs beam energy")
-        graph.GetXaxis().SetTitle("Beam energy, [GeV]")
-        graph.GetYaxis().SetTitle("Energy in 1st calorimeter layer, [MIP]")
-        canvas_gr.cd()
-        graph.Draw("APE")
-        canvas_gr.Write("e_in_1st__cal_layer_vs_beam_e_graph")
+        histo.Draw("COLZ")
+        histo.GetXaxis().SetTitle("Beam energy, [GeV]")
+        histo.GetYaxis().SetTitle("1st cal layer energy, [MIP]")
+        histo.Write(name)
 
     def n_hits_1st_cal_layer_vs_beam_energy(self):
         name = 'n_hits_in_1st_cal_layer_vs_beam_energy'
         canvas = TCanvas(name, name, 1024, 768)
-        canvas_gr = TCanvas('n_hits_in_1st_cal_layer_vs_beam_e', 'n_hits_in_1st_cal_layer_vs_beam_e', 1024, 768)
-
         canvas.cd()
 
-        cuts = 'tr1_n_clusters == 1 && tr2_n_clusters == 1 '
-        self.tree_5gev.Draw('Sum$(cal_hit_layer == 2)>>h_5gev(30, 0, 30)', cuts)
-        self.tree_4gev.Draw('Sum$(cal_hit_layer == 2)>>h_4gev(30, 0, 30)', cuts)
-        self.tree_3gev.Draw('Sum$(cal_hit_layer == 2)>>h_3gev(30, 0, 30)', cuts)
-        self.tree_2gev.Draw('Sum$(cal_hit_layer == 2)>>h_2gev(30, 0, 30)', cuts)
-        self.tree_1gev.Draw('Sum$(cal_hit_layer == 2)>>h_1gev(30, 0, 30)', cuts)
+        histo = TH2F(name, name, 5, 0.5, 5.5, 20, 0, 20)
+
+        cuts = 'tr1_n_clusters == 1 && tr2_n_clusters == 1'
+        self.tree_5gev.Draw('Sum$(cal_hit_layer == 2)>>h_5gev(20, 0, 20)', cuts)
+        self.tree_4gev.Draw('Sum$(cal_hit_layer == 2)>>h_4gev(20, 0, 20)', cuts)
+        self.tree_3gev.Draw('Sum$(cal_hit_layer == 2)>>h_3gev(20, 0, 20)', cuts)
+        self.tree_2gev.Draw('Sum$(cal_hit_layer == 2)>>h_2gev(20, 0, 20)', cuts)
+        self.tree_1gev.Draw('Sum$(cal_hit_layer == 2)>>h_1gev(20, 0, 20)', cuts)
 
         h_5gev = gROOT.FindObject('h_5gev')
         h_4gev = gROOT.FindObject('h_4gev')
@@ -269,38 +250,17 @@ class Calorimeter(Detector):
         h_2gev.Scale(1. / self.tree_2gev.GetEntries())
         h_1gev.Scale(1. / self.tree_1gev.GetEntries())
 
-        histos = [h_1gev, h_2gev, h_3gev, h_4gev, h_5gev]
+        for i in range(1, 51):
+            histo.Fill(5, h_5gev.GetBinCenter(i), h_5gev.GetBinContent(i))
+            histo.Fill(4, h_4gev.GetBinCenter(i), h_4gev.GetBinContent(i))
+            histo.Fill(3, h_3gev.GetBinCenter(i), h_3gev.GetBinContent(i))
+            histo.Fill(2, h_2gev.GetBinCenter(i), h_2gev.GetBinContent(i))
+            histo.Fill(1, h_1gev.GetBinCenter(i), h_1gev.GetBinContent(i))
 
-        x = [1., 2., 3., 4., 5.]
-        y = [0, 0, 0, 0, 0]
-        y_err = [0, 0, 0, 0, 0]
-        for i, hist in enumerate(histos):
-            y[i] = hist.GetMean()
-            y_err[i] = hist.GetRMS()
-
-        for i, hist in enumerate(histos):
-            if (i == 0):
-                hist.Draw('histo')
-                hist.SetTitle("Beam energy 1 GeV")
-                hist.GetXaxis().SetTitle("N hits in 1st cal layer")
-                hist.GetYaxis().SetTitle("Events, %")
-                continue
-            hist.Draw('histosame')
-            hist.SetTitle("Beam energy {} GeV".format(i + 1))
-            hist.SetLineColor(i + 1)
-
-        canvas.BuildLegend()
-        histos[0].SetTitle(name)
-
-        canvas.Write(name)
-
-        graph = TGraphErrors(5, np.array(x), np.array(y), nullptr, np.array(y_err))
-        graph.SetTitle('N_{hits} in 1st cal layer vs beam energy')
-        graph.GetXaxis().SetTitle("Beam energy, [GeV]")
-        graph.GetYaxis().SetTitle('N_{hits} in 1st calorimeter layer')
-        canvas_gr.cd()
-        graph.Draw("APE")
-        canvas_gr.Write('n_hits_in_1st_cal_layer_vs_beam_e_graph')
+        histo.Draw("COLZ")
+        histo.GetXaxis().SetTitle("Beam energy, [GeV]")
+        histo.GetYaxis().SetTitle("N_{hits} in 1st cal layer")
+        histo.Write(name)
 
 
 class Tracker(Detector):
