@@ -1,26 +1,6 @@
-'''
-TODO list:
 
-1) Check alignment -- done
-2) Check layer2 energy data/MC for calibration factor -- done
----
-1) Get files --done
-2) What distributions do i want?
-2.0) Events 11, 12,... vs energy beam --done
-2.1) y position for tr1,tr2,cal for all energies -- done
-2.2) All energies for tr1, tr2, cal -- done
-
-2.3)All hits to distance to shower 5 graphs for each energy - nothing is seen at all
-2.4)Energy deposit in 1st layer of cal. vs energy beam
-2.5)Energy in 1st layer vs number of bs hits
-
-2.3)Energy distribution for trackers 5 graphs
-'''
-
-from ROOT import TFile, gROOT, gDirectory, TGraphErrors, TH1F, TGraph, TCanvas, TPad, TF1, gStyle
+from ROOT import TFile, gROOT, gDirectory, TGraphErrors, TCanvas, gStyle
 import numpy as np
-import array
-from store_file import langaufun
 
 
 class Detector:
@@ -72,14 +52,14 @@ class Detector:
         print("Cal needs alignment for:", y_cal - fit_func.Eval(0))
 
     @classmethod
-    def check_layer2_energy(cls):
-        canvas = TCanvas('energy_layer2', 'energy_layer2', 1024, 768)
+    def check_layer3_energy(cls):
+        canvas = TCanvas('energy_2nd_cal_layer', 'energy_2nd_cal_layer', 1024, 768)
         n_bins = 100
         first = 0
         last = 200
 
-        cls.tree_data.Draw('Sum$(cal_hit_energy*(cal_hit_layer == 2))>>h_data({}, {}, {})'.format(n_bins, first, last))
-        cls.tree_mc.Draw('Sum$(cal_hit_energy*(cal_hit_layer == 2))>>h_mc({}, {}, {})'.format(n_bins, first, last))
+        cls.tree_data.Draw('Sum$(cal_hit_energy*(cal_hit_layer == 3))>>h_data({}, {}, {})'.format(n_bins, first, last))
+        cls.tree_mc.Draw('Sum$(cal_hit_energy*(cal_hit_layer == 3))>>h_mc({}, {}, {})'.format(n_bins, first, last))
         h_data = gROOT.FindObject('h_data')
         h_mc = gROOT.FindObject('h_mc')
 
@@ -97,10 +77,9 @@ class Detector:
         h_data.SetTitle('Data')
 
         canvas.BuildLegend()
-        h_mc.SetTitle('energy_layer2')
+        h_mc.SetTitle('energy_2nd_cal_layer')
         gStyle.SetOptStat(1110)
-        canvas.Write('energy_layer2')
-
+        canvas.Write('energy_2nd_cal_layer')
 
 
 class Calorimeter(Detector):
@@ -209,6 +188,89 @@ class Calorimeter(Detector):
         gStyle.SetOptStat(1110)
         canvas.Write()
 
+    def energy_1st_layer_vs_beam_energy(self):
+        name = 'energy_1st_cal_layer_vs_beam_energy'
+        canvas = TCanvas(name, name, 1024, 768)
+        canvas.cd()
+
+        cuts = 'tr1_n_clusters == 1 && tr2_n_clusters == 1 '
+        self.tree_5gev.Draw('Sum$(cal_hit_energy*(cal_hit_layer == 2))>>h_5gev(100, 0, 150)', cuts)
+        self.tree_4gev.Draw('Sum$(cal_hit_energy*(cal_hit_layer == 2))>>h_4gev(100, 0, 150)', cuts)
+        self.tree_3gev.Draw('Sum$(cal_hit_energy*(cal_hit_layer == 2))>>h_3gev(100, 0, 150)', cuts)
+        self.tree_2gev.Draw('Sum$(cal_hit_energy*(cal_hit_layer == 2))>>h_2gev(100, 0, 150)', cuts)
+        self.tree_1gev.Draw('Sum$(cal_hit_energy*(cal_hit_layer == 2))>>h_1gev(100, 0, 150)', cuts)
+
+        h_5gev = gROOT.FindObject('h_5gev')
+        h_4gev = gROOT.FindObject('h_4gev')
+        h_3gev = gROOT.FindObject('h_3gev')
+        h_2gev = gROOT.FindObject('h_2gev')
+        h_1gev = gROOT.FindObject('h_1gev')
+        h_5gev.Scale(1 / self.tree_5gev.GetEntries())
+        h_4gev.Scale(1 / self.tree_4gev.GetEntries())
+        h_3gev.Scale(1 / self.tree_3gev.GetEntries())
+        h_2gev.Scale(1 / self.tree_2gev.GetEntries())
+        h_1gev.Scale(1 / self.tree_1gev.GetEntries())
+
+        histos = [h_1gev, h_2gev, h_3gev, h_4gev, h_5gev]
+
+        for i, hist in enumerate(histos):
+            if (i == 0):
+                hist.Draw('histo')
+                hist.SetTitle("Beam energy 1 GeV")
+                hist.GetXaxis().SetTitle("Energy in 1st cal layer")
+                hist.GetYaxis().SetTitle("Events, %")
+                continue
+            hist.Draw('histosame')
+            hist.SetTitle("Beam energy {} GeV".format(i + 1))
+            hist.SetLineColor(i + 1)
+
+        #canvas.SetLogy()
+        canvas.BuildLegend()
+        histos[0].SetTitle(name)
+
+        canvas.Write(name)
+
+    def n_hits_1st_layer_vs_beam_energy(self):
+        name = 'n_hits_in_1st_cal_layer_vs_beam_energy'
+        canvas = TCanvas(name, name, 1024, 768)
+        canvas.cd()
+
+        cuts = 'tr1_n_clusters == 1 && tr2_n_clusters == 1 '
+        self.tree_5gev.Draw('Sum$(cal_hit_layer == 2)>>h_5gev(30, 0, 30)', cuts)
+        self.tree_4gev.Draw('Sum$(cal_hit_layer == 2)>>h_4gev(30, 0, 30)', cuts)
+        self.tree_3gev.Draw('Sum$(cal_hit_layer == 2)>>h_3gev(30, 0, 30)', cuts)
+        self.tree_2gev.Draw('Sum$(cal_hit_layer == 2)>>h_2gev(30, 0, 30)', cuts)
+        self.tree_1gev.Draw('Sum$(cal_hit_layer == 2)>>h_1gev(30, 0, 30)', cuts)
+
+        h_5gev = gROOT.FindObject('h_5gev')
+        h_4gev = gROOT.FindObject('h_4gev')
+        h_3gev = gROOT.FindObject('h_3gev')
+        h_2gev = gROOT.FindObject('h_2gev')
+        h_1gev = gROOT.FindObject('h_1gev')
+        h_5gev.Scale(1 / self.tree_5gev.GetEntries())
+        h_4gev.Scale(1 / self.tree_4gev.GetEntries())
+        h_3gev.Scale(1 / self.tree_3gev.GetEntries())
+        h_2gev.Scale(1 / self.tree_2gev.GetEntries())
+        h_1gev.Scale(1 / self.tree_1gev.GetEntries())
+
+        histos = [h_1gev, h_2gev, h_3gev, h_4gev, h_5gev]
+
+        for i, hist in enumerate(histos):
+            if (i == 0):
+                hist.Draw('histo')
+                hist.SetTitle("Beam energy 1 GeV")
+                hist.GetXaxis().SetTitle("N hits in 1st cal layer")
+                hist.GetYaxis().SetTitle("Events, %")
+                continue
+            hist.Draw('histosame')
+            hist.SetTitle("Beam energy {} GeV".format(i + 1))
+            hist.SetLineColor(i + 1)
+
+        #canvas.SetLogy()
+        canvas.BuildLegend()
+        histos[0].SetTitle(name)
+
+        canvas.Write(name)
 
 
 class Tracker(Detector):
@@ -361,12 +423,11 @@ class Tracker(Detector):
 
         cuts = ''
         distance = 'tr{}_cluster_y - cal_cluster_y[0]'.format(self.tr_idx)
-        y = 'tr{}_cluster_y'.format(self.tr_idx)
-        self.tree_5gev.Draw(distance + '>>h_5gev(50, -70, 50)', cuts)
-        self.tree_4gev.Draw(distance + '>>h_4gev(50, -70, 50)', cuts)
-        self.tree_3gev.Draw(distance + '>>h_3gev(50, -70, 50)', cuts)
-        self.tree_2gev.Draw(distance + '>>h_2gev(50, -70, 50)', cuts)
-        self.tree_1gev.Draw(distance + '>>h_1gev(50, -70, 50)', cuts)
+        self.tree_5gev.Draw(distance + '>>h_5gev(20, -70, 50)', cuts)
+        self.tree_4gev.Draw(distance + '>>h_4gev(20, -70, 50)', cuts)
+        self.tree_3gev.Draw(distance + '>>h_3gev(20, -70, 50)', cuts)
+        self.tree_2gev.Draw(distance + '>>h_2gev(20, -70, 50)', cuts)
+        self.tree_1gev.Draw(distance + '>>h_1gev(20, -70, 50)', cuts)
 
         h_5gev = gROOT.FindObject('h_5gev')
         h_4gev = gROOT.FindObject('h_4gev')
@@ -400,34 +461,6 @@ class Tracker(Detector):
 
 
 def main():
-
-    # Detector().check_alignment(Detector().tree_5gev)
-    # Detector().check_alignment(Detector().tree_4gev)
-    # Detector().check_alignment(Detector().tree_3gev)
-    # Detector().check_alignment(Detector().tree_2gev)
-    # Detector().check_alignment(Detector().tree_1gev)
-    # Detector().check_layer2_energy()
-    # Detector().e_ratio_tr2_tr1()
-
-    cal = Calorimeter()
-    cal.y()
-    cal.energy()
-    cal.energy_layer1()
-    cal.n_hits_layer1()
-
-    tr1 = Tracker(1)
-    tr1.n_clst_in_tr()
-    tr1.y()
-    tr1.energy()
-    tr1.shower_distance_scan_energy()
-    tr1.n_clst_in_tr_corr()
-
-    tr2 = Tracker(2)
-    tr2.n_clst_in_tr()
-    tr2.y()
-    tr2.energy()
-    tr2.shower_distance_scan_energy()
-    tr2.n_clst_in_tr_corr()
 
     input('Yaay I am finished :3')
 
