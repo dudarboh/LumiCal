@@ -1,5 +1,5 @@
 
-from ROOT import TFile, gROOT, gDirectory, TGraphErrors, TCanvas, gStyle
+from ROOT import TFile, gROOT, gDirectory, TGraphErrors, TCanvas, gStyle, nullptr
 import numpy as np
 
 
@@ -188,9 +188,10 @@ class Calorimeter(Detector):
         gStyle.SetOptStat(1110)
         canvas.Write()
 
-    def energy_1st_layer_vs_beam_energy(self):
+    def energy_1st_cal_layer_vs_beam_energy(self):
         name = 'energy_1st_cal_layer_vs_beam_energy'
         canvas = TCanvas(name, name, 1024, 768)
+        canvas_gr = TCanvas('e_in_1st__cal_layer_vs_beam_e', 'e_in_1st__cal_layer_vs_beam_e', 1024, 768)
         canvas.cd()
 
         cuts = 'tr1_n_clusters == 1 && tr2_n_clusters == 1 '
@@ -205,13 +206,20 @@ class Calorimeter(Detector):
         h_3gev = gROOT.FindObject('h_3gev')
         h_2gev = gROOT.FindObject('h_2gev')
         h_1gev = gROOT.FindObject('h_1gev')
-        h_5gev.Scale(1 / self.tree_5gev.GetEntries())
-        h_4gev.Scale(1 / self.tree_4gev.GetEntries())
-        h_3gev.Scale(1 / self.tree_3gev.GetEntries())
-        h_2gev.Scale(1 / self.tree_2gev.GetEntries())
-        h_1gev.Scale(1 / self.tree_1gev.GetEntries())
+        h_5gev.Scale(1. / self.tree_5gev.GetEntries())
+        h_4gev.Scale(1. / self.tree_4gev.GetEntries())
+        h_3gev.Scale(1. / self.tree_3gev.GetEntries())
+        h_2gev.Scale(1. / self.tree_2gev.GetEntries())
+        h_1gev.Scale(1. / self.tree_1gev.GetEntries())
 
         histos = [h_1gev, h_2gev, h_3gev, h_4gev, h_5gev]
+
+        x = [1., 2., 3., 4., 5.]
+        y = [0, 0, 0, 0, 0]
+        y_err = [0, 0, 0, 0, 0]
+        for i, hist in enumerate(histos):
+            y[i] = hist.GetMean()
+            y_err[i] = hist.GetRMS()
 
         for i, hist in enumerate(histos):
             if (i == 0):
@@ -224,15 +232,23 @@ class Calorimeter(Detector):
             hist.SetTitle("Beam energy {} GeV".format(i + 1))
             hist.SetLineColor(i + 1)
 
-        #canvas.SetLogy()
         canvas.BuildLegend()
         histos[0].SetTitle(name)
 
         canvas.Write(name)
+        graph = TGraphErrors(5, np.array(x), np.array(y), nullptr, np.array(y_err))
+        graph.SetTitle("Energy in 1st cal layer vs beam energy")
+        graph.GetXaxis().SetTitle("Beam energy, [GeV]")
+        graph.GetYaxis().SetTitle("Energy in 1st calorimeter layer, [MIP]")
+        canvas_gr.cd()
+        graph.Draw("APE")
+        canvas_gr.Write("e_in_1st__cal_layer_vs_beam_e_graph")
 
-    def n_hits_1st_layer_vs_beam_energy(self):
+    def n_hits_1st_cal_layer_vs_beam_energy(self):
         name = 'n_hits_in_1st_cal_layer_vs_beam_energy'
         canvas = TCanvas(name, name, 1024, 768)
+        canvas_gr = TCanvas('n_hits_in_1st_cal_layer_vs_beam_e', 'n_hits_in_1st_cal_layer_vs_beam_e', 1024, 768)
+
         canvas.cd()
 
         cuts = 'tr1_n_clusters == 1 && tr2_n_clusters == 1 '
@@ -247,13 +263,20 @@ class Calorimeter(Detector):
         h_3gev = gROOT.FindObject('h_3gev')
         h_2gev = gROOT.FindObject('h_2gev')
         h_1gev = gROOT.FindObject('h_1gev')
-        h_5gev.Scale(1 / self.tree_5gev.GetEntries())
-        h_4gev.Scale(1 / self.tree_4gev.GetEntries())
-        h_3gev.Scale(1 / self.tree_3gev.GetEntries())
-        h_2gev.Scale(1 / self.tree_2gev.GetEntries())
-        h_1gev.Scale(1 / self.tree_1gev.GetEntries())
+        h_5gev.Scale(1. / self.tree_5gev.GetEntries())
+        h_4gev.Scale(1. / self.tree_4gev.GetEntries())
+        h_3gev.Scale(1. / self.tree_3gev.GetEntries())
+        h_2gev.Scale(1. / self.tree_2gev.GetEntries())
+        h_1gev.Scale(1. / self.tree_1gev.GetEntries())
 
         histos = [h_1gev, h_2gev, h_3gev, h_4gev, h_5gev]
+
+        x = [1., 2., 3., 4., 5.]
+        y = [0, 0, 0, 0, 0]
+        y_err = [0, 0, 0, 0, 0]
+        for i, hist in enumerate(histos):
+            y[i] = hist.GetMean()
+            y_err[i] = hist.GetRMS()
 
         for i, hist in enumerate(histos):
             if (i == 0):
@@ -266,11 +289,18 @@ class Calorimeter(Detector):
             hist.SetTitle("Beam energy {} GeV".format(i + 1))
             hist.SetLineColor(i + 1)
 
-        #canvas.SetLogy()
         canvas.BuildLegend()
         histos[0].SetTitle(name)
 
         canvas.Write(name)
+
+        graph = TGraphErrors(5, np.array(x), np.array(y), nullptr, np.array(y_err))
+        graph.SetTitle('N_{hits} in 1st cal layer vs beam energy')
+        graph.GetXaxis().SetTitle("Beam energy, [GeV]")
+        graph.GetYaxis().SetTitle('N_{hits} in 1st calorimeter layer')
+        canvas_gr.cd()
+        graph.Draw("APE")
+        canvas_gr.Write('n_hits_in_1st_cal_layer_vs_beam_e_graph')
 
 
 class Tracker(Detector):
@@ -462,6 +492,10 @@ class Tracker(Detector):
 
 def main():
 
+    cal = Calorimeter()
+
+    cal.energy_1st_cal_layer_vs_beam_energy()
+    cal.n_hits_1st_cal_layer_vs_beam_energy()
     input('Yaay I am finished :3')
 
 
