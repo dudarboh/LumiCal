@@ -81,19 +81,18 @@ class Cluster:
             return [hit.energy for hit in self.hits]
 
     def get_position(self, pos_string):
-        if sum(self.weights) == 0:
-            return -9999
-        positions = [getattr(hit, pos_string) for hit in self.hits]
-        return sum([pos * self.weights[idx] / sum(self.weights) for idx, pos in enumerate(positions)])
+        numerator = 0
+        n_hits = len(self.hits)
+        for i in range(n_hits):
+            numerator += getattr(self.hits[i], pos_string) * self.weights[i]
+        return numerator / sum(self.weights)
 
     def get_n_pads(self):
         return len(self.hits)
 
     def merge(self, cluster2):
-        self.hits += cluster2.hits
-        for tower2 in cluster2.towers:
-            tower2.cluster = self.towers[0].cluster
-        self.towers += cluster2.towers
+        self.hits.extend(cluster2.hits)
+        self.towers.extend(cluster2.towers)
         self.energy = self.get_energy()
         self.weights = self.get_weights()
 
@@ -119,6 +118,7 @@ class OutputTree:
         self.tr1_hit_rho = array.array('f', [0.0] * 128)
         self.tr1_hit_x = array.array('f', [0.0] * 128)
         self.tr1_hit_y = array.array('f', [0.0] * 128)
+        self.tr1_hit_bs = array.array('i', [0] * 128)
         self.tr1_hit_energy = array.array('f', [0.0] * 128)
         self.tr1_n_clusters = array.array('i', [0])
         self.tr1_cluster_pad = array.array('f', [0.0] * 128)
@@ -140,6 +140,7 @@ class OutputTree:
         self.tr2_hit_rho = array.array('f', [0.0] * 128)
         self.tr2_hit_x = array.array('f', [0.0] * 128)
         self.tr2_hit_y = array.array('f', [0.0] * 128)
+        self.tr2_hit_bs = array.array('i', [0] * 128)
         self.tr2_hit_energy = array.array('f', [0.0] * 128)
         self.tr2_n_clusters = array.array('i', [0])
         self.tr2_cluster_pad = array.array('f', [0.0] * 128)
@@ -161,6 +162,7 @@ class OutputTree:
         self.cal_hit_rho = array.array('f', [0.0] * 128 * 5)
         self.cal_hit_x = array.array('f', [0.0] * 128 * 5)
         self.cal_hit_y = array.array('f', [0.0] * 128 * 5)
+        self.cal_hit_bs = array.array('i', [0] * 128)
         self.cal_hit_energy = array.array('f', [0.0] * 128 * 5)
         self.cal_n_towers = array.array('i', [0])
         self.cal_tower_pad = array.array('i', [0] * 128)
@@ -188,6 +190,7 @@ class OutputTree:
         self.tree.Branch('tr1_hit_rho', self.tr1_hit_rho, 'tr1_hit_rho[tr1_n_hits]/F')
         self.tree.Branch('tr1_hit_x', self.tr1_hit_x, 'tr1_hit_x[tr1_n_hits]/F')
         self.tree.Branch('tr1_hit_y', self.tr1_hit_y, 'tr1_hit_y[tr1_n_hits]/F')
+        self.tree.Branch('tr1_hit_bs', self.tr1_hit_bs, 'tr1_hit_bs[tr1_n_hits]/I')
         self.tree.Branch('tr1_hit_energy', self.tr1_hit_energy, 'tr1_hit_energy[tr1_n_hits]/F')
         self.tree.Branch('tr1_n_clusters', self.tr1_n_clusters, 'tr1_n_clusters/I')
         self.tree.Branch('tr1_cluster_pad', self.tr1_cluster_pad, 'tr1_cluster_pad[tr1_n_clusters]/F')
@@ -209,6 +212,7 @@ class OutputTree:
         self.tree.Branch('tr2_hit_rho', self.tr2_hit_rho, 'tr2_hit_rho[tr2_n_hits]/F')
         self.tree.Branch('tr2_hit_x', self.tr2_hit_x, 'tr2_hit_x[tr2_n_hits]/F')
         self.tree.Branch('tr2_hit_y', self.tr2_hit_y, 'tr2_hit_y[tr2_n_hits]/F')
+        self.tree.Branch('tr2_hit_bs', self.tr2_hit_bs, 'tr2_hit_bs[tr2_n_hits]/I')
         self.tree.Branch('tr2_hit_energy', self.tr2_hit_energy, 'tr2_hit_energy[tr2_n_hits]/F')
         self.tree.Branch('tr2_n_clusters', self.tr2_n_clusters, 'tr2_n_clusters/I')
         self.tree.Branch('tr2_cluster_pad', self.tr2_cluster_pad, 'tr2_cluster_pad[tr2_n_clusters]/F')
@@ -230,6 +234,7 @@ class OutputTree:
         self.tree.Branch('cal_hit_rho', self.cal_hit_rho, 'cal_hit_rho[cal_n_hits]/F')
         self.tree.Branch('cal_hit_x', self.cal_hit_x, 'cal_hit_x[cal_n_hits]/F')
         self.tree.Branch('cal_hit_y', self.cal_hit_y, 'cal_hit_y[cal_n_hits]/F')
+        self.tree.Branch('cal_hit_bs', self.cal_hit_bs, 'cal_hit_bs[cal_n_hits]/I')
         self.tree.Branch('cal_hit_energy', self.cal_hit_energy, 'cal_hit_energy[cal_n_hits]/F')
         self.tree.Branch('cal_n_towers', self.cal_n_towers, 'cal_n_towers/I')
         self.tree.Branch('cal_tower_pad', self.cal_tower_pad, 'cal_tower_pad[cal_n_towers]/I')
@@ -371,12 +376,13 @@ def make_clusters_list(towers_list, det):
                 cluster_towers.append(tower)
         clusters.append(Cluster(cluster_hits, cluster_towers, det))
 
+    # Sort to start merging the most energetic ones
     clusters.sort(key=lambda x: x.energy, reverse=True)
 
     merge_clusters(clusters)
     clusters.sort(key=lambda x: x.energy, reverse=True)
 
-    # Change tower cluster indices after merging and resorting
+    # Change tower clusters indices after resorting by the energy
     for i, cluster in enumerate(clusters):
         for tower in cluster.towers:
             tower.cluster = i
@@ -399,16 +405,14 @@ def main():
     output_tree.define_branches()
 
     for idx, event in enumerate(tree):
-        if idx == 3000:
-            break
+        # if idx == 3000:
+        #     break
 
-        if idx % (10000) == 0 and idx != 0:
+        if idx % (10000) == 0:
             time_min = (time.time() - start_time) // 60
             time_sec = (time.time() - start_time) % 60
-            eta_min = (time_min * 60 + time_sec) * (tree.GetEntries() // idx - 1) // 60
-            eta_sec = (time_min * 60 + time_sec) * (tree.GetEntries() // idx - 1) % 60
-            print('%d min %d sec' % (time_min, time_sec), end=' ')
-            print('ETA: %d min %d sec' % (eta_min, eta_sec))
+            print('Event: {} out of {};'.format(idx, tree.GetEntries()), end=' ')
+            print('{} min {} sec'.format(time_min, time_sec))
 
         hits_tr1, hits_tr2, hits_cal = make_hits_lists(event)
 
@@ -443,6 +447,7 @@ def main():
             output_tree.tr1_hit_rho[i] = hit.rho
             output_tree.tr1_hit_x[i] = hit.x
             output_tree.tr1_hit_y[i] = hit.y
+            output_tree.tr1_hit_bs[i] = hit.bs
             output_tree.tr1_hit_energy[i] = hit.energy
         output_tree.tr1_n_clusters[0] = len(clusters_tr1)
         for i, cluster in enumerate(clusters_tr1):
@@ -463,6 +468,7 @@ def main():
             output_tree.tr2_hit_rho[i] = hit.rho
             output_tree.tr2_hit_x[i] = hit.x
             output_tree.tr2_hit_y[i] = hit.y
+            output_tree.tr2_hit_bs[i] = hit.bs
             output_tree.tr2_hit_energy[i] = hit.energy
         output_tree.tr2_n_clusters[0] = len(clusters_tr2)
         for i, cluster in enumerate(clusters_tr2):
@@ -483,6 +489,7 @@ def main():
             output_tree.cal_hit_rho[i] = hit.rho
             output_tree.cal_hit_x[i] = hit.x
             output_tree.cal_hit_y[i] = hit.y
+            output_tree.cal_hit_bs[i] = hit.bs
             output_tree.cal_hit_energy[i] = hit.energy
         output_tree.cal_n_towers[0] = len(towers_cal)
         for i, tower in enumerate(towers_cal):
