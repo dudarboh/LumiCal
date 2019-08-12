@@ -35,7 +35,6 @@ Number of pads in one sector: 64
 '''
 from ROOT import TGraphErrors, TMath
 import numpy as np
-import random
 from itertools import islice
 
 
@@ -114,14 +113,10 @@ class ApvMaps:
 class CalibFiles:
     '''APV calibration. To convert Volts to MIPs'''
     # path on alzt.tau.ac.il server = '/data/alzta/aborysov/tb_2016_data/code/lumical_clust/fcalib/'
-    calib_files = ['./calibration_files/calibration_apv_0.txt', './calibration_files/calibration_apv_1.txt',
-                   './calibration_files/calibration_apv_2.txt', './calibration_files/calibration_apv_3.txt',
-                   './calibration_files/calibration_apv_4.txt', './calibration_files/calibration_apv_5.txt',
-                   './calibration_files/calibration_apv_6.txt', './calibration_files/calibration_apv_7.txt',
-                   './calibration_files/calibration_apv_8.txt', './calibration_files/calibration_apv_9.txt',
-                   './calibration_files/calibration_apv_10.txt', './calibration_files/calibration_apv_11.txt',
-                   './calibration_files/calibration_apv_12.txt', './calibration_files/calibration_apv_13.txt',
-                   './calibration_files/calibration_apv_14.txt', './calibration_files/calibration_apv_15.txt']
+    path = "./calibration_files/tb16_cd_nn_reg9_nocm_corr_wfita_reco/"
+    calib_files = []
+    for i in range(16):
+        calib_files.append(path + "calibration_apv_{}".format(i) + ".txt")
 
 
 class Hit:
@@ -178,23 +173,6 @@ class Hit:
         signal = apv_signal if apv_signal < 1450. else 1450.
 
         return graph.Eval(signal)
-
-
-class HitMC:
-    def __init__(self, cell_id, energy_in_mev):
-        mev2mip = 1. / 0.0885
-        self.sector = ((int(cell_id) >> 8) & 0xff) - 11
-        self.pad = int(cell_id) & 0xff
-        self.layer = ((int(cell_id) >> 16) & 0xff) - 1
-        self.energy = energy_in_mev * mev2mip
-
-        # Implement noise in progress. Need to put not random number!
-        self.energy = random.gauss(self.energy, 0.52353509)
-
-        self.rho = 80. + 0.9 + 1.8 * self.pad
-        self.phi = np.pi / 2 + np.pi / 12 - np.pi / 48 - np.pi / 24 * self.sector
-        self.x = self.rho * np.cos(self.phi)
-        self.y = self.rho * np.sin(self.phi)
 
 
 class Tower:
@@ -267,7 +245,7 @@ class Cluster:
         self.n_pads = self.get_n_pads()
 
 
-def set_towers(hits):
+def make_towers_list(hits):
     towers_pos = set([(hit.sector, hit.pad) for hit in hits])
     towers = []
     for pos in towers_pos:

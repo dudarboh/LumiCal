@@ -1,20 +1,3 @@
-'''
-TODO list:
-
-1) Check alignment -- done
-2) Check layer2 energy data/MC for calibration factor -- done
-3) Check x,y,e,n_clst to check is everything ok? -- i hope is ok. I ll see it later
-4) Back-scattering analysis vs beam energy
----
-1) Get files
-2) What distributions do i want?
-2.1)All hits to distance to shower 5 graphs for each energy - nothing is seen at all
-2.2)% of hits that are potential backscattered - graph
-2.3)Energy distribution for trackers 5 graphs
-2.4)Energy deposit in 1st layer of cal. vs energy beam
-2.5)Energy in 1st layer vs number of bs hits
-'''
-
 from ROOT import TFile, gROOT, TGraphErrors, TH1F, TGraph, TCanvas, TPad, TF1, gStyle
 import numpy as np
 import array
@@ -22,7 +5,7 @@ from store_file import langaufun
 
 
 class Detector:
-    file_data = TFile.Open('./result_trees/extracted_data.root', 'read')
+    file_data = TFile.Open('./extracted_trees/with_1.4_energy_cut/extracted_5_gev_energy_scan_1.root', 'read')
     tree_data = file_data.data
 
     # file_mc = TFile.Open('./result_trees/extracted_mc.root', 'read')
@@ -477,6 +460,26 @@ class Calorimeter(Detector):
         gStyle.SetOptStat(1110)
         canvas.Write('shower_y')
 
+    def y_loop(self):
+        canvas = TCanvas('shower_y', 'shower_y', 1024, 768)
+        n_bins = 180
+        first = 110
+        last = 200
+        histo = TH1F("name", "title", 180, 110, 200)
+        for event in self.tree_data:
+            cluster_y = event.cal_cluster_y
+            for y in cluster_y:
+                histo.Fill(y)
+
+        histo.Draw('histo')
+        histo.Scale(1. / histo.GetEntries())
+        histo.SetLineWidth(3)
+        histo.SetTitle('Data')
+
+        canvas.BuildLegend()
+        gStyle.SetOptStat(1110)
+        canvas.Write('shower_y')
+
     def x(self):
         canvas = TCanvas('shower_x', 'title', 1024, 768)
         n_bins = 60
@@ -895,7 +898,8 @@ class Tracker(Detector):
 
 def main():
 
-    Detector().check_alignment()
+    cal = Calorimeter()
+    cal.y_loop()
     # Detector().check_layer2_energy()
     # Detector().e_ratio_tr2_tr1()
 
