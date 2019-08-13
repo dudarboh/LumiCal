@@ -53,74 +53,6 @@ def extract_hits(event):
 
     return hits_tracker1, hits_tracker2, hits_calorimeter
 
-
-def extract_mc(event):
-
-    vx = event.vX
-    vy = event.vY
-    px = event.GetLeaf("Tracks.pX").GetValue()
-    py = event.GetLeaf("Tracks.pY").GetValue()
-    pz = event.GetLeaf("Tracks.pZ").GetValue()
-    # Calculated as averaged through all hits at certain zeds
-    z_tr1 = 3300.511
-    z_tr2 = 3325.513
-    z_cal = 3384.033
-
-    # +177.2 is to convert y from montecarto to my coordinate system
-    x_tr1 = vx + px * z_tr1 / pz
-    y_tr1 = vy + py * z_tr1 / pz + 177.2
-    rho_tr1 = (x_tr1**2 + y_tr1**2)**0.5
-
-    x_tr2 = vx + px * z_tr2 / pz
-    y_tr2 = vy + py * z_tr2 / pz + 177.2
-    rho_tr2 = (x_tr2**2 + y_tr2**2)**0.5
-
-    x_cal = vx + px * z_cal / pz
-    y_cal = vy + py * z_cal / pz + 177.2
-    rho_cal = (x_cal**2 + y_cal**2)**0.5
-
-    true_hits = [(x_tr1, y_tr1, rho_tr1), (x_tr2, y_tr2, rho_tr2), (x_cal, y_cal, rho_cal)]
-
-    n_hits = event.numHits
-    hits_calorimeter = []
-    hits_tracker1 = []
-    hits_tracker2 = []
-
-    for i in range(n_hits):
-
-        cell_id = event.GetLeaf("Hits.cellID").GetValue(i)
-        energy_in_mev = event.GetLeaf("Hits.eHit").GetValue(i)
-
-        hit = HitMC(cell_id, energy_in_mev)
-
-        # Calorimeter efficiency simulation
-        S0 = 0.819
-        p1 = 2.166
-        p0 = 0.999 / 2.
-        if random.random() > (1 + math.erf((hit.energy - S0) / p1)) * p0 and hit.layer > 1:
-            continue
-
-        if (hit.sector == 0
-           or hit.sector == 3
-           or hit.layer == 7
-           or hit.pad < 0
-           or hit.sector < 0
-           or (hit.sector == 1 and hit.pad < 20)
-           or (hit.sector == 2 and hit.pad < 20)
-           or (hit.layer >= 2 and hit.energy < 1.4)
-           or bad_pad(hit.sector, hit.pad, hit.layer)):
-            continue
-
-        if hit.layer == 0:
-            hits_tracker1.append(hit)
-        elif hit.layer == 1:
-            hits_tracker2.append(hit)
-        else:
-            hits_calorimeter.append(hit)
-
-    return hits_tracker1, hits_tracker2, hits_calorimeter, true_hits
-
-
 def align_detector(hits_tr1, hits_tr2, hits_cal):
     # For runs > 734
     # tr1_shift = -0.16287581540422025
@@ -138,216 +70,52 @@ def align_detector(hits_tr1, hits_tr2, hits_cal):
         hit.y -= cal_shift
 
 
-def main(data_type, beam_energy, run_type):
+def main(beam_energy, run_type):
     start_time = time.time()
-    print("Adding files...")
 
-    if data_type == 'data':
-        tree = TChain("apv_reco")
-        if run_type == 1:
-            if beam_energy == 5:
-                tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run737_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-                tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run738_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-                tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run739_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-                tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run740_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-                tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run741_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-            elif beam_energy == 4:
-                tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run742_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-                tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run743_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-                tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run744_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-            elif beam_energy == 3:
-                tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run745_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-                tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run746_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-            elif beam_energy == 2:
-                tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run747_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-                tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run748_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-            elif beam_energy == 1:
-                tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run749_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-                tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run750_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+    tree = TChain("apv_reco")
+    if run_type == 1:
+        if beam_energy == 5:
+            tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run737_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+            tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run738_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+            tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run739_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+            tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run740_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+            tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run741_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+        elif beam_energy == 4:
+            tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run742_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+            tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run743_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+            tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run744_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+        elif beam_energy == 3:
+            tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run745_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+            tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run746_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+        elif beam_energy == 2:
+            tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run747_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+            tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run748_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+        elif beam_energy == 1:
+            tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run749_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+            tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run750_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
 
-        elif run_type == 2:
-            if beam_energy == 5:
-                tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run754_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-                tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run755_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-                tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run756_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-            elif beam_energy == 4:
-                tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run757_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-                tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run758_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-            elif beam_energy == 3:
-                tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run759_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-                tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run760_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-            elif beam_energy == 2:
-                tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run761_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-                tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run762_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-            elif beam_energy == 1:
-                tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run763_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-                tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run764_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+    elif run_type == 2:
+        if beam_energy == 5:
+            tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run754_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+            tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run755_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+            tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run756_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+        elif beam_energy == 4:
+            tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run757_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+            tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run758_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+        elif beam_energy == 3:
+            tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run759_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+            tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run760_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+        elif beam_energy == 2:
+            tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run761_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+            tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run762_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+        elif beam_energy == 1:
+            tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run763_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+            tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run764_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
 
-        if run_type == 3:
-            if beam_energy == 5:
-                # those are wfit, not wfita!
-                tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run715_tb16_charge_div_nn_reg9_nocm_corr_wfit_reco.root")
-                tree.Add("./tb16_cd_nn_reg9_nocm_corr_wfita_reco/run716_tb16_charge_div_nn_reg9_nocm_corr_wfit_reco.root")
 
         output_file = TFile('./extracted_trees/extracted_{}_gev_run_type_{}.root'.format(beam_energy, run_type), 'recreate')
         output_tree = TTree('data', 'Extracted Data')
-    elif data_type == 'mc':
-        file = TFile.Open('./trees_raw/T16NST5G_22_03-11_16outputfile.root')
-        tree = file.Lcal
-        output_file = TFile('./extracted_trees/extracted_mc.root', 'recreate')
-        output_tree = TTree('mc', 'Extracted MC')
-
-    print("Total n events in loaded files: ", tree.GetEntries())
-
-    print("Creating branches in output file...")
-    # Comment unnecessary branches
-    tr1_n_hits = array.array('i', [0])
-    # tr1_hit_pad = array.array('i', [0] * 128)
-    # tr1_hit_sector = array.array('i', [0] * 128)
-    # tr1_hit_layer = array.array('i', [0] * 128)
-    # tr1_hit_rho = array.array('f', [0.0] * 128)
-    # tr1_hit_x = array.array('f', [0.0] * 128)
-    # tr1_hit_y = array.array('f', [0.0] * 128)
-    tr1_hit_energy = array.array('f', [0.0] * 128)
-
-    tr1_n_clusters = array.array('i', [0])
-    # tr1_cluster_pad = array.array('f', [0.0] * 128)
-    # tr1_cluster_sector = array.array('f', [0.0] * 128)
-    # tr1_cluster_layer = array.array('f', [0.0] * 128)
-    # tr1_cluster_rho = array.array('f', [0.0] * 128)
-    # tr1_cluster_x = array.array('f', [0.0] * 128)
-    tr1_cluster_y = array.array('f', [0.0] * 128)
-    tr1_cluster_energy = array.array('f', [0.0] * 128)
-    # tr1_cluster_n_pads = array.array('i', [0] * 128)
-
-    tr2_n_hits = array.array('i', [0])
-    # tr2_hit_pad = array.array('i', [0] * 128)
-    # tr2_hit_sector = array.array('i', [0] * 128)
-    # tr2_hit_layer = array.array('i', [0] * 128)
-    # tr2_hit_rho = array.array('f', [0.0] * 128)
-    # tr2_hit_x = array.array('f', [0.0] * 128)
-    # tr2_hit_y = array.array('f', [0.0] * 128)
-    tr2_hit_energy = array.array('f', [0.0] * 128)
-
-    tr2_n_clusters = array.array('i', [0])
-    # tr2_cluster_pad = array.array('f', [0.0] * 128)
-    # tr2_cluster_sector = array.array('f', [0.0] * 128)
-    # tr2_cluster_layer = array.array('f', [0.0] * 128)
-    # tr2_cluster_rho = array.array('f', [0.0] * 128)
-    # tr2_cluster_x = array.array('f', [0.0] * 128)
-    tr2_cluster_y = array.array('f', [0.0] * 128)
-    tr2_cluster_energy = array.array('f', [0.0] * 128)
-    # tr2_cluster_n_pads = array.array('i', [0] * 128)
-
-    # cal_n_hits = array.array('i', [0])
-    # cal_hit_pad = array.array('i', [0] * 128 * 5)
-    # cal_hit_sector = array.array('i', [0] * 128 * 5)
-    # cal_hit_layer = array.array('i', [0] * 128 * 5)
-    # cal_hit_rho = array.array('f', [0.0] * 128 * 5)
-    # cal_hit_x = array.array('f', [0.0] * 128 * 5)
-    # cal_hit_y = array.array('f', [0.0] * 128 * 5)
-    # cal_hit_energy = array.array('f', [0.0] * 128 * 5)
-
-    # cal_n_towers = array.array('i', [0])
-    # cal_tower_pad = array.array('i', [0] * 128)
-    # cal_tower_sector = array.array('i', [0] * 128)
-    # cal_tower_energy = array.array('f', [0.0] * 128)
-    # cal_tower_cluster = array.array('i', [0] * 128)
-
-    cal_n_clusters = array.array('i', [0])
-    # cal_cluster_pad = array.array('f', [0.0] * 128 * 5)
-    # cal_cluster_sector = array.array('f', [0.0] * 128 * 5)
-    # cal_cluster_layer = array.array('f', [0.0] * 128 * 5)
-    # cal_cluster_rho = array.array('f', [0.0] * 128 * 5)
-    # cal_cluster_x = array.array('f', [0.0] * 128 * 5)
-    cal_cluster_y = array.array('f', [0.0] * 128 * 5)
-    # cal_cluster_energy = array.array('f', [0.0] * 128 * 5)
-    # cal_cluster_n_pads = array.array('i', [0] * 128 * 5)
-
-    output_tree.Branch('tr1_n_hits', tr1_n_hits, 'tr1_n_hits/I')
-    # output_tree.Branch('tr1_hit_pad', tr1_hit_pad, 'tr1_hit_pad[tr1_n_hits]/I')
-    # output_tree.Branch('tr1_hit_sector', tr1_hit_sector, 'tr1_hit_sector[tr1_n_hits]/I')
-    # output_tree.Branch('tr1_hit_layer', tr1_hit_layer, 'tr1_hit_layer[tr1_n_hits]/I')
-    # output_tree.Branch('tr1_hit_rho', tr1_hit_rho, 'tr1_hit_rho[tr1_n_hits]/F')
-    # output_tree.Branch('tr1_hit_x', tr1_hit_x, 'tr1_hit_x[tr1_n_hits]/F')
-    # output_tree.Branch('tr1_hit_y', tr1_hit_y, 'tr1_hit_y[tr1_n_hits]/F')
-    output_tree.Branch('tr1_hit_energy', tr1_hit_energy, 'tr1_hit_energy[tr1_n_hits]/F')
-
-    output_tree.Branch('tr1_n_clusters', tr1_n_clusters, 'tr1_n_clusters/I')
-    # output_tree.Branch('tr1_cluster_pad', tr1_cluster_pad, 'tr1_cluster_pad[tr1_n_clusters]/F')
-    # output_tree.Branch('tr1_cluster_sector', tr1_cluster_sector, 'tr1_cluster_sector[tr1_n_clusters]/F')
-    # output_tree.Branch('tr1_cluster_layer', tr1_cluster_layer, 'tr1_cluster_layer[tr1_n_clusters]/F')
-    # output_tree.Branch('tr1_cluster_rho', tr1_cluster_rho, 'tr1_cluster_rho[tr1_n_clusters]/F')
-    # output_tree.Branch('tr1_cluster_x', tr1_cluster_x, 'tr1_cluster_x[tr1_n_clusters]/F')
-    output_tree.Branch('tr1_cluster_y', tr1_cluster_y, 'tr1_cluster_y[tr1_n_clusters]/F')
-    output_tree.Branch('tr1_cluster_energy', tr1_cluster_energy, 'tr1_cluster_energy[tr1_n_clusters]/F')
-    # output_tree.Branch('tr1_cluster_n_pads', tr1_cluster_n_pads, 'tr1_cluster_n_pads[tr1_n_clusters]/I')
-
-    output_tree.Branch('tr2_n_hits', tr2_n_hits, 'tr2_n_hits/I')
-    # output_tree.Branch('tr2_hit_pad', tr2_hit_pad, 'tr2_hit_pad[tr2_n_hits]/I')
-    # output_tree.Branch('tr2_hit_sector', tr2_hit_sector, 'tr2_hit_sector[tr2_n_hits]/I')
-    # output_tree.Branch('tr2_hit_layer', tr2_hit_layer, 'tr2_hit_layer[tr2_n_hits]/I')
-    # output_tree.Branch('tr2_hit_rho', tr2_hit_rho, 'tr2_hit_rho[tr2_n_hits]/F')
-    # output_tree.Branch('tr2_hit_x', tr2_hit_x, 'tr2_hit_x[tr2_n_hits]/F')
-    # output_tree.Branch('tr2_hit_y', tr2_hit_y, 'tr2_hit_y[tr2_n_hits]/F')
-    output_tree.Branch('tr2_hit_energy', tr2_hit_energy, 'tr2_hit_energy[tr2_n_hits]/F')
-
-    output_tree.Branch('tr2_n_clusters', tr2_n_clusters, 'tr2_n_clusters/I')
-    # output_tree.Branch('tr2_cluster_pad', tr2_cluster_pad, 'tr2_cluster_pad[tr2_n_clusters]/F')
-    # output_tree.Branch('tr2_cluster_sector', tr2_cluster_sector, 'tr2_cluster_sector[tr2_n_clusters]/F')
-    # output_tree.Branch('tr2_cluster_layer', tr2_cluster_layer, 'tr2_cluster_layer[tr2_n_clusters]/F')
-    # output_tree.Branch('tr2_cluster_rho', tr2_cluster_rho, 'tr2_cluster_rho[tr2_n_clusters]/F')
-    # output_tree.Branch('tr2_cluster_x', tr2_cluster_x, 'tr2_cluster_x[tr2_n_clusters]/F')
-    output_tree.Branch('tr2_cluster_y', tr2_cluster_y, 'tr2_cluster_y[tr2_n_clusters]/F')
-    output_tree.Branch('tr2_cluster_energy', tr2_cluster_energy, 'tr2_cluster_energy[tr2_n_clusters]/F')
-    # output_tree.Branch('tr2_cluster_n_pads', tr2_cluster_n_pads, 'tr2_cluster_n_pads[tr2_n_clusters]/I')
-
-    # output_tree.Branch('cal_n_hits', cal_n_hits, 'cal_n_hits/I')
-    # output_tree.Branch('cal_hit_pad', cal_hit_pad, 'cal_hit_pad[cal_n_hits]/I')
-    # output_tree.Branch('cal_hit_sector', cal_hit_sector, 'cal_hit_sector[cal_n_hits]/I')
-    # output_tree.Branch('cal_hit_layer', cal_hit_layer, 'cal_hit_layer[cal_n_hits]/I')
-    # output_tree.Branch('cal_hit_rho', cal_hit_rho, 'cal_hit_rho[cal_n_hits]/F')
-    # output_tree.Branch('cal_hit_x', cal_hit_x, 'cal_hit_x[cal_n_hits]/F')
-    # output_tree.Branch('cal_hit_y', cal_hit_y, 'cal_hit_y[cal_n_hits]/F')
-    # output_tree.Branch('cal_hit_energy', cal_hit_energy, 'cal_hit_energy[cal_n_hits]/F')
-
-    # output_tree.Branch('cal_n_towers', cal_n_towers, 'cal_n_towers/I')
-    # output_tree.Branch('cal_tower_pad', cal_tower_pad, 'cal_tower_pad[cal_n_towers]/I')
-    # output_tree.Branch('cal_tower_sector', cal_tower_sector, 'cal_tower_sector[cal_n_towers]/I')
-    # output_tree.Branch('cal_tower_energy', cal_tower_energy, 'cal_tower_energy[cal_n_towers]/F')
-    # output_tree.Branch('cal_tower_cluster', cal_tower_cluster, 'cal_tower_cluster[cal_n_towers]/I')
-
-    output_tree.Branch('cal_n_clusters', cal_n_clusters, 'cal_n_clusters/I')
-    # output_tree.Branch('cal_cluster_pad', cal_cluster_pad, 'cal_cluster_pad[cal_n_clusters]/F')
-    # output_tree.Branch('cal_cluster_sector', cal_cluster_sector, 'cal_cluster_sector[cal_n_clusters]/F')
-    # output_tree.Branch('cal_cluster_layer', cal_cluster_layer, 'cal_cluster_layer[cal_n_clusters]/F')
-    # output_tree.Branch('cal_cluster_rho', cal_cluster_rho, 'cal_cluster_rho[cal_n_clusters]/F')
-    # output_tree.Branch('cal_cluster_x', cal_cluster_x, 'cal_cluster_x[cal_n_clusters]/F')
-    output_tree.Branch('cal_cluster_y', cal_cluster_y, 'cal_cluster_y[cal_n_clusters]/F')
-    # output_tree.Branch('cal_cluster_energy', cal_cluster_energy, 'cal_cluster_energy[cal_n_clusters]/F')
-    # output_tree.Branch('cal_cluster_n_pads', cal_cluster_n_pads, 'cal_cluster_n_pads[cal_n_clusters]/I')
-
-    if data_type == 'mc':
-        tr1_true_hit_rho = array.array('f', [0])
-        tr1_true_hit_x = array.array('f', [0])
-        tr1_true_hit_y = array.array('f', [0])
-        tr2_true_hit_rho = array.array('f', [0])
-        tr2_true_hit_x = array.array('f', [0])
-        tr2_true_hit_y = array.array('f', [0])
-        cal_true_hit_rho = array.array('f', [0])
-        cal_true_hit_x = array.array('f', [0])
-        cal_true_hit_y = array.array('f', [0])
-        output_tree.Branch('tr1_true_hit_rho', tr1_true_hit_rho, 'tr1_true_hit_rho/F')
-        output_tree.Branch('tr1_true_hit_x', tr1_true_hit_x, 'tr1_true_hit_x/F')
-        output_tree.Branch('tr1_true_hit_y', tr1_true_hit_y, 'tr1_true_hit_y/F')
-        output_tree.Branch('tr2_true_hit_rho', tr2_true_hit_rho, 'tr2_true_hit_rho/F')
-        output_tree.Branch('tr2_true_hit_x', tr2_true_hit_x, 'tr2_true_hit_x/F')
-        output_tree.Branch('tr2_true_hit_y', tr2_true_hit_y, 'tr2_true_hit_y/F')
-        output_tree.Branch('cal_true_hit_rho', cal_true_hit_rho, 'cal_true_hit_rho/F')
-        output_tree.Branch('cal_true_hit_x', cal_true_hit_x, 'cal_true_hit_x/F')
-        output_tree.Branch('cal_true_hit_y', cal_true_hit_y, 'cal_true_hit_y/F')
-
-    print("Processing the data, please wait...")
 
     for idx, event in enumerate(tree):
         # if idx == 10:
@@ -362,21 +130,8 @@ def main(data_type, beam_energy, run_type):
             print('ETA: %d min %d sec' % (eta_min, eta_sec))
 
         # Extract data.
-        if data_type == 'data':
-            hits_tr1, hits_tr2, hits_cal = extract_hits(event)
-            align_detector(hits_tr1, hits_tr2, hits_cal)
-
-        elif data_type == 'mc':
-            hits_tr1, hits_tr2, hits_cal, true_hits = extract_mc(event)
-            tr1_true_hit_x[0] = true_hits[0][0]
-            tr1_true_hit_y[0] = true_hits[0][1]
-            tr1_true_hit_rho[0] = true_hits[0][2]
-            tr2_true_hit_x[0] = true_hits[1][0]
-            tr2_true_hit_y[0] = true_hits[1][1]
-            tr2_true_hit_rho[0] = true_hits[1][2]
-            cal_true_hit_x[0] = true_hits[2][0]
-            cal_true_hit_y[0] = true_hits[2][1]
-            cal_true_hit_rho[0] = true_hits[2][2]
+        hits_tr1, hits_tr2, hits_cal = extract_hits(event)
+        align_detector(hits_tr1, hits_tr2, hits_cal)
 
         towers_tr1 = set_towers(hits_tr1)
         towers_tr2 = set_towers(hits_tr2)

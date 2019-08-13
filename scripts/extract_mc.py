@@ -9,6 +9,11 @@ import time
 import cProfile
 import pstats
 
+# Important notes which confused me in the past
+# 4 sectors: 0, 1, 2, 3
+# 64 pads: 0, 1, 2, ..., 63
+# 8 layers: 0, 1 - trackers; 2, 3, 4, 5, 6, 7 - calorimeter; 7 - tab (bad)
+
 
 def bad_pad(sector, pad, layer):
     return ((layer == 0 and sector == 1 and pad in (26, 61))
@@ -324,23 +329,23 @@ def make_hits_lists(event):
         S0 = 0.819
         p1 = 2.166
         p0 = 0.999 / 2.
-        if random.random() > (1 + math.erf((hit_energy - S0) / p1)) * p0 and hit_layer[i] > 20:
+        if random.random() > (1 + math.erf((hit_energy - S0) / p1)) * p0 and hit_layer[i] > 1:
             continue
 
         # Selection as in data
         if (hit_sector[i] == 0 or hit_sector[i] == 3
-           or hit_pad[i] < 20 or hit_layer[i] == 28
-           or (hit_layer[i] >= 20 and hit_energy < 1.4)
-           or (hit_layer[i] < 20 and hit_energy < 0.)
+           or hit_pad[i] < 20 or hit_layer[i] == 7
+           or (hit_layer[i] > 1 and hit_energy < 1.4)
+           or (hit_layer[i] <= 1 and hit_energy < 0.)
            or bad_pad(hit_sector[i], hit_pad[i], hit_layer[i])):
             continue
 
         # If passed the selection create hit and add to corresponding list
         hit = Hit(hit_sector[i], hit_pad[i], hit_layer[i], hit_bs[i], hit_energy)
 
-        if hit.layer == 1:
+        if hit.layer == 0:
             hits_tracker1.append(hit)
-        elif hit.layer == 6:
+        elif hit.layer == 1:
             hits_tracker2.append(hit)
         else:
             hits_calorimeter.append(hit)
