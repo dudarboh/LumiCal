@@ -29,6 +29,20 @@ def bad_pad(sector, pad, layer):
             or (layer == 6 and sector == 2 and pad in (34, 42, 54, 57, 59, 60)))
 
 
+def align_detector(hits_tr1, hits_tr2, hits_cal):
+    # Was checked for Itamars misalignment.
+    tr1_shift = -0.2480096316087952
+    tr2_shift = 0.9012092661162399
+    cal_shift = -0.6531996345075299
+
+    for hit in hits_tr1:
+        hit.y -= tr1_shift
+    for hit in hits_tr2:
+        hit.y -= tr2_shift
+    for hit in hits_cal:
+        hit.y -= cal_shift
+
+
 class Hit:
     def __init__(self, sector, pad, layer, bs, energy_in_mip):
         self.sector = sector
@@ -36,10 +50,10 @@ class Hit:
         self.layer = layer
         self.energy = energy_in_mip
         self.bs = bs
-        self.rho = 80. + 0.9 + 1.8 * self.pad
-        self.phi = np.pi / 2 + np.pi / 12 - np.pi / 48 - np.pi / 24 * self.sector
-        self.x = self.rho * np.cos(self.phi)
-        self.y = self.rho * np.sin(self.phi)
+        rho = 80. + 0.9 + 1.8 * self.pad
+        phi = np.pi / 2 + np.pi / 12 - np.pi / 48 - np.pi / 24 * self.sector
+        self.x = rho * np.cos(phi)
+        self.y = rho * np.sin(phi)
 
 
 class Tower:
@@ -66,12 +80,11 @@ class Cluster:
         # Energies in trackers. LogW in Calorimeter
         self.weights = self.get_weights()
 
-        self.pad = self.get_position('pad')
-        self.sector = self.get_position('sector')
-        self.layer = self.get_position('layer')
-        self.rho = self.get_position('rho')
-        self.x = self.get_position('x')
-        self.y = self.get_position('y')
+        self.sector = self.get_cluster_sector()
+        self.pad = self.get_cluster_pad()
+        self.layer = self.get_cluster_layer()
+        self.x = self.get_cluster_x()
+        self.y = self.get_cluster_y()
 
         self.n_pads = self.get_n_pads()
 
@@ -85,12 +98,20 @@ class Cluster:
         else:
             return [hit.energy for hit in self.hits]
 
-    def get_position(self, pos_string):
-        numerator = 0
-        n_hits = len(self.hits)
-        for i in range(n_hits):
-            numerator += getattr(self.hits[i], pos_string) * self.weights[i]
-        return numerator / sum(self.weights)
+    def get_cluster_sector(self):
+        return sum([self.hits[i].sector * self.weights[i] for i in range(len(self.hits))]) / sum(self.weights)
+
+    def get_cluster_pad(self):
+        return sum([self.hits[i].pad * self.weights[i] for i in range(len(self.hits))]) / sum(self.weights)
+
+    def get_cluster_layer(self):
+        return sum([self.hits[i].layer * self.weights[i] for i in range(len(self.hits))]) / sum(self.weights)
+
+    def get_cluster_x(self):
+        return sum([self.hits[i].x * self.weights[i] for i in range(len(self.hits))]) / sum(self.weights)
+
+    def get_cluster_y(self):
+        return sum([self.hits[i].y * self.weights[i] for i in range(len(self.hits))]) / sum(self.weights)
 
     def get_n_pads(self):
         return len(self.hits)
@@ -101,12 +122,11 @@ class Cluster:
         self.energy = self.get_energy()
         self.weights = self.get_weights()
 
-        self.pad = self.get_position('pad')
-        self.sector = self.get_position('sector')
-        self.layer = self.get_position('layer')
-        self.rho = self.get_position('rho')
-        self.x = self.get_position('x')
-        self.y = self.get_position('y')
+        self.pad = self.get_cluster_pad()
+        self.sector = self.get_cluster_sector()
+        self.layer = self.get_cluster_layer()
+        self.x = self.get_cluster_x()
+        self.y = self.get_cluster_y()
 
         self.n_pads = self.get_n_pads()
 
@@ -120,7 +140,6 @@ class OutputTree:
         self.tr1_hit_pad = array.array('i', [0] * 128)
         self.tr1_hit_sector = array.array('i', [0] * 128)
         self.tr1_hit_layer = array.array('i', [0] * 128)
-        self.tr1_hit_rho = array.array('f', [0.0] * 128)
         self.tr1_hit_x = array.array('f', [0.0] * 128)
         self.tr1_hit_y = array.array('f', [0.0] * 128)
         self.tr1_hit_bs = array.array('i', [0] * 128)
@@ -129,20 +148,15 @@ class OutputTree:
         self.tr1_cluster_pad = array.array('f', [0.0] * 128)
         self.tr1_cluster_sector = array.array('f', [0.0] * 128)
         self.tr1_cluster_layer = array.array('f', [0.0] * 128)
-        self.tr1_cluster_rho = array.array('f', [0.0] * 128)
         self.tr1_cluster_x = array.array('f', [0.0] * 128)
         self.tr1_cluster_y = array.array('f', [0.0] * 128)
         self.tr1_cluster_energy = array.array('f', [0.0] * 128)
         self.tr1_cluster_n_pads = array.array('i', [0] * 128)
-        self.tr1_true_hit_rho = array.array('f', [0])
-        self.tr1_true_hit_x = array.array('f', [0])
-        self.tr1_true_hit_y = array.array('f', [0])
 
         self.tr2_n_hits = array.array('i', [0])
         self.tr2_hit_pad = array.array('i', [0] * 128)
         self.tr2_hit_sector = array.array('i', [0] * 128)
         self.tr2_hit_layer = array.array('i', [0] * 128)
-        self.tr2_hit_rho = array.array('f', [0.0] * 128)
         self.tr2_hit_x = array.array('f', [0.0] * 128)
         self.tr2_hit_y = array.array('f', [0.0] * 128)
         self.tr2_hit_bs = array.array('i', [0] * 128)
@@ -151,20 +165,15 @@ class OutputTree:
         self.tr2_cluster_pad = array.array('f', [0.0] * 128)
         self.tr2_cluster_sector = array.array('f', [0.0] * 128)
         self.tr2_cluster_layer = array.array('f', [0.0] * 128)
-        self.tr2_cluster_rho = array.array('f', [0.0] * 128)
         self.tr2_cluster_x = array.array('f', [0.0] * 128)
         self.tr2_cluster_y = array.array('f', [0.0] * 128)
         self.tr2_cluster_energy = array.array('f', [0.0] * 128)
         self.tr2_cluster_n_pads = array.array('i', [0] * 128)
-        self.tr2_true_hit_rho = array.array('f', [0])
-        self.tr2_true_hit_x = array.array('f', [0])
-        self.tr2_true_hit_y = array.array('f', [0])
 
         self.cal_n_hits = array.array('i', [0])
         self.cal_hit_pad = array.array('i', [0] * 128 * 5)
         self.cal_hit_sector = array.array('i', [0] * 128 * 5)
         self.cal_hit_layer = array.array('i', [0] * 128 * 5)
-        self.cal_hit_rho = array.array('f', [0.0] * 128 * 5)
         self.cal_hit_x = array.array('f', [0.0] * 128 * 5)
         self.cal_hit_y = array.array('f', [0.0] * 128 * 5)
         self.cal_hit_bs = array.array('i', [0] * 128)
@@ -178,21 +187,16 @@ class OutputTree:
         self.cal_cluster_pad = array.array('f', [0.0] * 128 * 5)
         self.cal_cluster_sector = array.array('f', [0.0] * 128 * 5)
         self.cal_cluster_layer = array.array('f', [0.0] * 128 * 5)
-        self.cal_cluster_rho = array.array('f', [0.0] * 128 * 5)
         self.cal_cluster_x = array.array('f', [0.0] * 128 * 5)
         self.cal_cluster_y = array.array('f', [0.0] * 128 * 5)
         self.cal_cluster_energy = array.array('f', [0.0] * 128 * 5)
         self.cal_cluster_n_pads = array.array('i', [0] * 128 * 5)
-        self.cal_true_hit_rho = array.array('f', [0])
-        self.cal_true_hit_x = array.array('f', [0])
-        self.cal_true_hit_y = array.array('f', [0])
 
     def define_branches(self):
         self.tree.Branch('tr1_n_hits', self.tr1_n_hits, 'tr1_n_hits/I')
         self.tree.Branch('tr1_hit_pad', self.tr1_hit_pad, 'tr1_hit_pad[tr1_n_hits]/I')
         self.tree.Branch('tr1_hit_sector', self.tr1_hit_sector, 'tr1_hit_sector[tr1_n_hits]/I')
         self.tree.Branch('tr1_hit_layer', self.tr1_hit_layer, 'tr1_hit_layer[tr1_n_hits]/I')
-        self.tree.Branch('tr1_hit_rho', self.tr1_hit_rho, 'tr1_hit_rho[tr1_n_hits]/F')
         self.tree.Branch('tr1_hit_x', self.tr1_hit_x, 'tr1_hit_x[tr1_n_hits]/F')
         self.tree.Branch('tr1_hit_y', self.tr1_hit_y, 'tr1_hit_y[tr1_n_hits]/F')
         self.tree.Branch('tr1_hit_bs', self.tr1_hit_bs, 'tr1_hit_bs[tr1_n_hits]/I')
@@ -201,20 +205,15 @@ class OutputTree:
         self.tree.Branch('tr1_cluster_pad', self.tr1_cluster_pad, 'tr1_cluster_pad[tr1_n_clusters]/F')
         self.tree.Branch('tr1_cluster_sector', self.tr1_cluster_sector, 'tr1_cluster_sector[tr1_n_clusters]/F')
         self.tree.Branch('tr1_cluster_layer', self.tr1_cluster_layer, 'tr1_cluster_layer[tr1_n_clusters]/F')
-        self.tree.Branch('tr1_cluster_rho', self.tr1_cluster_rho, 'tr1_cluster_rho[tr1_n_clusters]/F')
         self.tree.Branch('tr1_cluster_x', self.tr1_cluster_x, 'tr1_cluster_x[tr1_n_clusters]/F')
         self.tree.Branch('tr1_cluster_y', self.tr1_cluster_y, 'tr1_cluster_y[tr1_n_clusters]/F')
         self.tree.Branch('tr1_cluster_energy', self.tr1_cluster_energy, 'tr1_cluster_energy[tr1_n_clusters]/F')
         self.tree.Branch('tr1_cluster_n_pads', self.tr1_cluster_n_pads, 'tr1_cluster_n_pads[tr1_n_clusters]/I')
-        self.tree.Branch('tr1_true_hit_rho', self.tr1_true_hit_rho, 'tr1_true_hit_rho/F')
-        self.tree.Branch('tr1_true_hit_x', self.tr1_true_hit_x, 'tr1_true_hit_x/F')
-        self.tree.Branch('tr1_true_hit_y', self.tr1_true_hit_y, 'tr1_true_hit_y/F')
 
         self.tree.Branch('tr2_n_hits', self.tr2_n_hits, 'tr2_n_hits/I')
         self.tree.Branch('tr2_hit_pad', self.tr2_hit_pad, 'tr2_hit_pad[tr2_n_hits]/I')
         self.tree.Branch('tr2_hit_sector', self.tr2_hit_sector, 'tr2_hit_sector[tr2_n_hits]/I')
         self.tree.Branch('tr2_hit_layer', self.tr2_hit_layer, 'tr2_hit_layer[tr2_n_hits]/I')
-        self.tree.Branch('tr2_hit_rho', self.tr2_hit_rho, 'tr2_hit_rho[tr2_n_hits]/F')
         self.tree.Branch('tr2_hit_x', self.tr2_hit_x, 'tr2_hit_x[tr2_n_hits]/F')
         self.tree.Branch('tr2_hit_y', self.tr2_hit_y, 'tr2_hit_y[tr2_n_hits]/F')
         self.tree.Branch('tr2_hit_bs', self.tr2_hit_bs, 'tr2_hit_bs[tr2_n_hits]/I')
@@ -223,20 +222,15 @@ class OutputTree:
         self.tree.Branch('tr2_cluster_pad', self.tr2_cluster_pad, 'tr2_cluster_pad[tr2_n_clusters]/F')
         self.tree.Branch('tr2_cluster_sector', self.tr2_cluster_sector, 'tr2_cluster_sector[tr2_n_clusters]/F')
         self.tree.Branch('tr2_cluster_layer', self.tr2_cluster_layer, 'tr2_cluster_layer[tr2_n_clusters]/F')
-        self.tree.Branch('tr2_cluster_rho', self.tr2_cluster_rho, 'tr2_cluster_rho[tr2_n_clusters]/F')
         self.tree.Branch('tr2_cluster_x', self.tr2_cluster_x, 'tr2_cluster_x[tr2_n_clusters]/F')
         self.tree.Branch('tr2_cluster_y', self.tr2_cluster_y, 'tr2_cluster_y[tr2_n_clusters]/F')
         self.tree.Branch('tr2_cluster_energy', self.tr2_cluster_energy, 'tr2_cluster_energy[tr2_n_clusters]/F')
         self.tree.Branch('tr2_cluster_n_pads', self.tr2_cluster_n_pads, 'tr2_cluster_n_pads[tr2_n_clusters]/I')
-        self.tree.Branch('tr2_true_hit_rho', self.tr2_true_hit_rho, 'tr2_true_hit_rho/F')
-        self.tree.Branch('tr2_true_hit_x', self.tr2_true_hit_x, 'tr2_true_hit_x/F')
-        self.tree.Branch('tr2_true_hit_y', self.tr2_true_hit_y, 'tr2_true_hit_y/F')
 
         self.tree.Branch('cal_n_hits', self.cal_n_hits, 'cal_n_hits/I')
         self.tree.Branch('cal_hit_pad', self.cal_hit_pad, 'cal_hit_pad[cal_n_hits]/I')
         self.tree.Branch('cal_hit_sector', self.cal_hit_sector, 'cal_hit_sector[cal_n_hits]/I')
         self.tree.Branch('cal_hit_layer', self.cal_hit_layer, 'cal_hit_layer[cal_n_hits]/I')
-        self.tree.Branch('cal_hit_rho', self.cal_hit_rho, 'cal_hit_rho[cal_n_hits]/F')
         self.tree.Branch('cal_hit_x', self.cal_hit_x, 'cal_hit_x[cal_n_hits]/F')
         self.tree.Branch('cal_hit_y', self.cal_hit_y, 'cal_hit_y[cal_n_hits]/F')
         self.tree.Branch('cal_hit_bs', self.cal_hit_bs, 'cal_hit_bs[cal_n_hits]/I')
@@ -250,14 +244,10 @@ class OutputTree:
         self.tree.Branch('cal_cluster_pad', self.cal_cluster_pad, 'cal_cluster_pad[cal_n_clusters]/F')
         self.tree.Branch('cal_cluster_sector', self.cal_cluster_sector, 'cal_cluster_sector[cal_n_clusters]/F')
         self.tree.Branch('cal_cluster_layer', self.cal_cluster_layer, 'cal_cluster_layer[cal_n_clusters]/F')
-        self.tree.Branch('cal_cluster_rho', self.cal_cluster_rho, 'cal_cluster_rho[cal_n_clusters]/F')
         self.tree.Branch('cal_cluster_x', self.cal_cluster_x, 'cal_cluster_x[cal_n_clusters]/F')
         self.tree.Branch('cal_cluster_y', self.cal_cluster_y, 'cal_cluster_y[cal_n_clusters]/F')
         self.tree.Branch('cal_cluster_energy', self.cal_cluster_energy, 'cal_cluster_energy[cal_n_clusters]/F')
         self.tree.Branch('cal_cluster_n_pads', self.cal_cluster_n_pads, 'cal_cluster_n_pads[cal_n_clusters]/I')
-        self.tree.Branch('cal_true_hit_rho', self.cal_true_hit_rho, 'cal_true_hit_rho/F')
-        self.tree.Branch('cal_true_hit_x', self.cal_true_hit_x, 'cal_true_hit_x/F')
-        self.tree.Branch('cal_true_hit_y', self.cal_true_hit_y, 'cal_true_hit_y/F')
 
 
 def set_most_energetic_neighbors(towers_list):
@@ -311,9 +301,13 @@ def make_hits_lists(event):
     hit_sector = event.hit_sector
     hit_pad = event.hit_pad
     hit_layer = event.hit_layer
-    # Convert MeV to MIP
+
     hit_energy_mev = event.hit_energy
     hit_bs = event.hit_bs
+
+    S0 = 0.819
+    p1 = 2.166
+    p0 = 0.999 / 2.
 
     hits_tracker1 = []
     hits_tracker2 = []
@@ -325,20 +319,19 @@ def make_hits_lists(event):
         # Implement noise in progress. Need to put not random number!
         # hit_energy = random.gauss(hit_energy, 0.52353509)
 
-        # Calorimeter efficiency simulation
-        S0 = 0.819
-        p1 = 2.166
-        p0 = 0.999 / 2.
-        if random.random() > (1 + math.erf((hit_energy - S0) / p1)) * p0 and hit_layer[i] > 1:
+        # Selection as in data
+        if (hit_pad[i] < 20
+            or (hit_layer[i] > 1 and hit_energy < 1.4)
+            or hit_layer[i] == 7
+            or hit_sector[i] == 0 or hit_sector[i] == 3
+            or bad_pad(hit_sector[i], hit_pad[i], hit_layer[i])
+            or (hit_layer[i] <= 1 and hit_energy < 0.)):
             continue
 
-        # Selection as in data
-        if (hit_sector[i] == 0 or hit_sector[i] == 3
-           or hit_pad[i] < 20 or hit_layer[i] == 7
-           or (hit_layer[i] > 1 and hit_energy < 1.4)
-           or (hit_layer[i] <= 1 and hit_energy < 0.)
-           or bad_pad(hit_sector[i], hit_pad[i], hit_layer[i])):
-            continue
+        # Calorimeter efficiency simulation
+        if hit_layer[i] > 1:
+            if random.random() > (1. + math.erf((hit_energy - S0) / p1)) * p0:
+                continue
 
         # If passed the selection create hit and add to corresponding list
         hit = Hit(hit_sector[i], hit_pad[i], hit_layer[i], hit_bs[i], hit_energy)
@@ -398,11 +391,11 @@ def make_clusters_list(towers_list, det):
 def main():
     start_time = time.time()
 
-    file = TFile.Open('../mc_root_files/LUCAS_TB16_5GeV.root')
+    file = TFile.Open('../mc_root_files/lucas_tb16_5gev.root')
     tree = file.LumiCal
     print("Total n events in loaded files: ", tree.GetEntries())
 
-    output_file = TFile("../extracted_root_files/extracted_mc_5GeV.root", "RECREATE")
+    output_file = TFile("../extracted_root_files/extracted_mc_5gev.root", "RECREATE")
     output_file.cd()
 
     output_tree = OutputTree()
@@ -410,7 +403,7 @@ def main():
     output_tree.define_branches()
 
     for idx, event in enumerate(tree):
-        # if idx == 3000:
+        # if idx == 200000:
         #     break
 
         if idx % (10000) == 0:
@@ -420,6 +413,7 @@ def main():
             print('{} min {} sec'.format(time_min, time_sec))
 
         hits_tr1, hits_tr2, hits_cal = make_hits_lists(event)
+        align_detector(hits_tr1, hits_tr2, hits_cal)
 
         towers_tr1 = make_towers_list(hits_tr1)
         towers_tr2 = make_towers_list(hits_tr2)
@@ -449,7 +443,6 @@ def main():
             output_tree.tr1_hit_pad[i] = hit.pad
             output_tree.tr1_hit_sector[i] = hit.sector
             output_tree.tr1_hit_layer[i] = hit.layer
-            output_tree.tr1_hit_rho[i] = hit.rho
             output_tree.tr1_hit_x[i] = hit.x
             output_tree.tr1_hit_y[i] = hit.y
             output_tree.tr1_hit_bs[i] = hit.bs
@@ -459,7 +452,6 @@ def main():
             output_tree.tr1_cluster_pad[i] = cluster.pad
             output_tree.tr1_cluster_sector[i] = cluster.sector
             output_tree.tr1_cluster_layer[i] = cluster.layer
-            output_tree.tr1_cluster_rho[i] = cluster.rho
             output_tree.tr1_cluster_x[i] = cluster.x
             output_tree.tr1_cluster_y[i] = cluster.y
             output_tree.tr1_cluster_energy[i] = cluster.energy
@@ -470,7 +462,6 @@ def main():
             output_tree.tr2_hit_pad[i] = hit.pad
             output_tree.tr2_hit_sector[i] = hit.sector
             output_tree.tr2_hit_layer[i] = hit.layer
-            output_tree.tr2_hit_rho[i] = hit.rho
             output_tree.tr2_hit_x[i] = hit.x
             output_tree.tr2_hit_y[i] = hit.y
             output_tree.tr2_hit_bs[i] = hit.bs
@@ -480,7 +471,6 @@ def main():
             output_tree.tr2_cluster_pad[i] = cluster.pad
             output_tree.tr2_cluster_sector[i] = cluster.sector
             output_tree.tr2_cluster_layer[i] = cluster.layer
-            output_tree.tr2_cluster_rho[i] = cluster.rho
             output_tree.tr2_cluster_x[i] = cluster.x
             output_tree.tr2_cluster_y[i] = cluster.y
             output_tree.tr2_cluster_energy[i] = cluster.energy
@@ -491,7 +481,6 @@ def main():
             output_tree.cal_hit_pad[i] = hit.pad
             output_tree.cal_hit_sector[i] = hit.sector
             output_tree.cal_hit_layer[i] = hit.layer
-            output_tree.cal_hit_rho[i] = hit.rho
             output_tree.cal_hit_x[i] = hit.x
             output_tree.cal_hit_y[i] = hit.y
             output_tree.cal_hit_bs[i] = hit.bs
@@ -507,7 +496,6 @@ def main():
             output_tree.cal_cluster_pad[i] = cluster.pad
             output_tree.cal_cluster_sector[i] = cluster.sector
             output_tree.cal_cluster_layer[i] = cluster.layer
-            output_tree.cal_cluster_rho[i] = cluster.rho
             output_tree.cal_cluster_x[i] = cluster.x
             output_tree.cal_cluster_y[i] = cluster.y
             output_tree.cal_cluster_energy[i] = cluster.energy
