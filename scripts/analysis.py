@@ -35,25 +35,24 @@ def check_calibration():
 
     file_mc = TFile.Open("../extracted_root_files/extracted_mc_5gev.root", 'read')
     tree_mc = file_mc.mc
-    tree_mc.Draw('cal_hit_energy>>h_mc(1000, 0, 5)', "cal_hit_layer == 3", "histo")
+    tree_mc.Draw('cal_hit_energy>>h_mc(100, 0, 100)', "cal_hit_layer == 4", "histo")
     h_mc = gROOT.FindObject('h_mc')
     h_mc.SetLineColor(2)
     h_mc.SetLineWidth(3)
-    h_mc.Scale(1. / tree_mc.GetEntries())
     mc_mean = h_mc.GetMean()
 
     file_5gev = TFile.Open('../extracted_root_files/extracted_data_5gev.root', 'read')
     tree_5gev = file_5gev.data
 
-    tree_5gev.Draw('cal_hit_energy>>h_data(1000, 0, 5)', "cal_hit_layer == 3", "histosame")
+    tree_5gev.Draw('cal_hit_energy/16.8*19.206>>h_data(100, 0, 100)', "cal_hit_layer == 4", "histosame")
     h_data = gROOT.FindObject('h_data')
     h_data.SetLineColor(1)
     h_data.SetLineWidth(3)
-    h_data.Scale(1. / tree_5gev.GetEntries())
+    # h_data.Scale(1. / tree_5gev.GetEntries())
+    h_mc.Scale(h_data.GetEntries() / h_mc.GetEntries())
     data_mean = h_data.GetMean()
 
-    canvas.BuildLegend()
-
+    canvas.SetLogy()
     print(mc_mean, "MC mean energy")
     print(data_mean, "data mean energy")
 

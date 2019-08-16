@@ -51,9 +51,9 @@ def bad_pad(sector, pad, layer):
 
 def align_detector(hits_tr1, hits_tr2, hits_cal):
     # For runs > 734
-    tr1_shift = -0.16280259610687153
-    tr2_shift = 0.9683106600427891
-    cal_shift = -0.8055080639359176
+    tr1_shift = -0.14156476251841354
+    tr2_shift = 0.9273328597379873
+    cal_shift = -0.785768097219659
 
     for hit in hits_tr1:
         hit.y -= tr1_shift
@@ -135,13 +135,37 @@ class ApvMaps:
                               59, 58, 61, 60, 63, 62, -1]
 
 
-class CalibFiles:
+class CalibGraphs:
     '''APV calibration. To convert Volts to MIPs'''
     # path on alzt.tau.ac.il server = '/data/alzta/aborysov/tb_2016_data/code/lumical_clust/fcalib/'
-    path = "../calibration_files/"
-    calib_files = []
-    for i in range(16):
-        calib_files.append(path + "calibration_apv_{}".format(i) + ".txt")
+    calib_graphs = []
+
+    @classmethod
+    def get_calib_graphs(cls):
+        path = "../calibration_files/"
+        for i in range(16):
+            calib_file = path + "calibration_apv_{}".format(i) + ".txt"
+
+            # 1st point
+            x = [0.]
+            y = [0.]
+            x_err = [1.e-5]
+            y_err = [1.e-5]
+
+            # Calibration x-y data is inverted
+            with open(calib_file, 'r') as file:
+                for line in islice(file, 1, None):
+                    x.append(float(line.split('  ')[1]))
+                    y.append(float(line.split('  ')[0]))
+                    x_err.append(float(line.split('  ')[3]))
+                    y_err.append(float(line.split('  ')[2]))
+
+            x = np.array(x)
+            y = np.array(y) * 19.206
+            x_err = np.array(x_err)
+            y_err = np.array(y_err) * 19.206
+
+            cls.calib_graphs.append(TGraphErrors(len(x), x, y, x_err, y_err))
 
 
 class Hit:
@@ -173,30 +197,8 @@ class Hit:
         return sector, pad, layer
 
     def calib_energy(self, apv_id, apv_signal):
-        calib_file = CalibFiles.calib_files[apv_id]
-
-        x = [0.]
-        y = [0. * 16.8]
-        x_err = [1.e-5]
-        y_err = [1.e-5 * 16.8]
-        # Calibration x-y data is inverted
-        with open(calib_file, 'r') as file:
-            for line in islice(file, 1, None):
-                x.append(float(line.split('  ')[1]))
-                y.append(float(line.split('  ')[0]) * 16.8)
-                x_err.append(float(line.split('  ')[3]))
-                y_err.append(float(line.split('  ')[2]) * 16.8)
-
-        x = np.array(x)
-        y = np.array(y)
-        x_err = np.array(x_err)
-        y_err = np.array(y_err)
-
-        graph = TGraphErrors(len(x), x, y, x_err, y_err)
-
         signal = apv_signal if apv_signal < 1450. else 1450.
-
-        return graph.Eval(signal)
+        return CalibGraphs.calib_graphs[apv_id].Eval(signal)
 
 
 class Tower:
@@ -213,9 +215,8 @@ class Tower:
 
 
 class Cluster:
-    def __init__(self, cluster_hits, cluster_towers, det):
+    def __init__(self, cluster_hits, det):
         self.hits = cluster_hits
-        self.towers = cluster_towers
         self.det = det
 
         self.energy = self.get_energy()
@@ -261,7 +262,6 @@ class Cluster:
 
     def merge(self, cluster2):
         self.hits.extend(cluster2.hits)
-        self.towers.extend(cluster2.towers)
         self.energy = self.get_energy()
         self.weights = self.get_weights()
 
@@ -455,13 +455,13 @@ def make_hits_lists(event):
 
         hit = Hit(id_arr[i], channel_arr[i], signal_arr[i])
 
-        if (hit.sector == 0 or hit.sector == 3
-           or hit.layer == 7
-           or hit.sector < 0  # THIS IS ESSENTIAL to exclude grounded channel!!!
-           or hit.pad < 20
+        if (hit.pad < 20
            or (hit.layer > 1 and (hit.energy < 1.4 or apv_nn_output[i] < 0.5))
+           or hit.sector == 0 or hit.sector == 3
+           or hit.layer == 7
            or (hit.layer <= 1 and (signal_arr[i] < 0. or apv_nn_output[i] < 0.5))
-           or bad_pad(hit.sector, hit.pad, hit.layer)):
+           or bad_pad(hit.sector, hit.pad, hit.layer)
+           or hit.sector < 0):  # THIS IS ESSENTIAL to exclude grounded channel!!!
             continue
 
         if hit.layer == 0:
@@ -495,12 +495,10 @@ def make_clusters_list(towers_list, det):
     n_clusters = max([tower.cluster for tower in towers_list]) + 1
     for clst_idx in range(n_clusters):
         cluster_hits = []
-        cluster_towers = []
         for tower in towers_list:
             if tower.cluster == clst_idx:
                 cluster_hits.extend(tower.hits)
-                cluster_towers.append(tower)
-        clusters.append(Cluster(cluster_hits, cluster_towers, det))
+        clusters.append(Cluster(cluster_hits, det))
 
     # Sort to start merging the most energetic ones
     clusters.sort(key=lambda x: x.energy, reverse=True)
@@ -508,16 +506,14 @@ def make_clusters_list(towers_list, det):
     merge_clusters(clusters)
     clusters.sort(key=lambda x: x.energy, reverse=True)
 
-    # Change tower clusters indices after resorting by the energy
-    for i, cluster in enumerate(clusters):
-        for tower in cluster.towers:
-            tower.cluster = i
-
     return clusters
 
 
 def main(beam_energy, run_type):
     start_time = time.time()
+
+    CalibGraphs.get_calib_graphs()
+
     tree = TChain("apv_reco")
     if run_type == 1:
         if beam_energy == 5:
@@ -568,6 +564,7 @@ def main(beam_energy, run_type):
     output_tree.define_arrays()
     output_tree.define_branches()
 
+    n_events = tree.GetEntries()
     for idx, event in enumerate(tree):
         # if idx == 1000:
         #     break
@@ -575,8 +572,7 @@ def main(beam_energy, run_type):
         if idx % (10000) == 0:
             time_min = (time.time() - start_time) // 60
             time_sec = (time.time() - start_time) % 60
-            # This line cause the bug
-            # print('Event: {} out of {};'.format(idx, tree.GetEntries()), end=' ')
+            print('Event: {} out of {};'.format(idx, n_events), end=' ')
             print('Event: {}'.format(idx), end=' ')
             print('{} min {} sec'.format(time_min, time_sec))
 

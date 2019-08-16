@@ -70,9 +70,8 @@ class Tower:
 
 
 class Cluster:
-    def __init__(self, cluster_hits, cluster_towers, det):
+    def __init__(self, cluster_hits, det):
         self.hits = cluster_hits
-        self.towers = cluster_towers
         self.det = det
 
         self.energy = self.get_energy()
@@ -118,7 +117,6 @@ class Cluster:
 
     def merge(self, cluster2):
         self.hits.extend(cluster2.hits)
-        self.towers.extend(cluster2.towers)
         self.energy = self.get_energy()
         self.weights = self.get_weights()
 
@@ -324,8 +322,8 @@ def make_hits_lists(event):
             or (hit_layer[i] > 1 and hit_energy < 1.4)
             or hit_layer[i] == 7
             or hit_sector[i] == 0 or hit_sector[i] == 3
-            or bad_pad(hit_sector[i], hit_pad[i], hit_layer[i])
-            or (hit_layer[i] <= 1 and hit_energy < 0.)):
+            or (hit_layer[i] <= 1 and hit_energy < 0.)
+            or bad_pad(hit_sector[i], hit_pad[i], hit_layer[i])):
             continue
 
         # Calorimeter efficiency simulation
@@ -367,23 +365,16 @@ def make_clusters_list(towers_list, det):
     n_clusters = max([tower.cluster for tower in towers_list]) + 1
     for clst_idx in range(n_clusters):
         cluster_hits = []
-        cluster_towers = []
         for tower in towers_list:
             if tower.cluster == clst_idx:
                 cluster_hits.extend(tower.hits)
-                cluster_towers.append(tower)
-        clusters.append(Cluster(cluster_hits, cluster_towers, det))
+        clusters.append(Cluster(cluster_hits, det))
 
     # Sort to start merging the most energetic ones
     clusters.sort(key=lambda x: x.energy, reverse=True)
 
     merge_clusters(clusters)
     clusters.sort(key=lambda x: x.energy, reverse=True)
-
-    # Change tower clusters indices after resorting by the energy
-    for i, cluster in enumerate(clusters):
-        for tower in cluster.towers:
-            tower.cluster = i
 
     return clusters
 
