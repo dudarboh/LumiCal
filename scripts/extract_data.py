@@ -1,29 +1,29 @@
 # File are taken from Sasha Borysov directory:
 # /data/alzta/aborysov/tb_2016_data/code/tb16_reco_cd_tr_nn_wfita
-'''
-     0           1         2         3
- _________________________________________
-|   63     |    127   |   191   |   255   |
-|-----------------------------------------|
- |   62    |    126   |   190   |  254   |
- |---------------------------------------|
-  |   61    |   125   |   189  |  253   |
-  |-------------------------------------|
 
-         .........................
-         .........................
+#      0           1         2         3
+#  _________________________________________
+# |   63     |    127   |   191   |   255   |
+# |-----------------------------------------|
+#  |   62    |    126   |   190   |  254   |
+#  |---------------------------------------|
+#   |   61    |   125   |   189  |  253   |
+#   |-------------------------------------|
 
-         |  0  |  64 | 128 | 192 |
-         |_____|_____|_____|_____|
+#          .........................
+#          .........................
 
-###CalibFiles###
-Energy calibration files for APVs
+#          |  0  |  64 | 128 | 192 |
+#          |_____|_____|_____|_____|
 
-# Important notes which confused me in the past
-# 4 sectors: 0, 1, 2, 3
-# 64 pads: 0, 1, 2, ..., 63
-# 8 layers: 0, 1 - trackers; 2, 3, 4, 5, 6, 7 - calorimeter; 7 - tab (bad)
-'''
+# ###CalibFiles###
+# Energy calibration files for APVs
+
+# # Important notes which confused me in the past
+# # 4 sectors: 0, 1, 2, 3
+# # 64 pads: 0, 1, 2, ..., 63
+# # 8 layers: 0, 1 - trackers; 2, 3, 4, 5, 6, 7 - calorimeter; 7 - tab (bad)
+
 
 from ROOT import TFile, TTree, TChain, TGraphErrors
 import array
@@ -161,9 +161,9 @@ class CalibGraphs:
                     y_err.append(float(line.split('  ')[2]))
 
             x = np.array(x)
-            y = np.array(y) * 19.206
+            y = np.array(y) * 10.
             x_err = np.array(x_err)
-            y_err = np.array(y_err) * 19.206
+            y_err = np.array(y_err)
 
             cls.calib_graphs.append(TGraphErrors(len(x), x, y, x_err, y_err))
 
@@ -243,18 +243,28 @@ class Cluster:
             return [hit.energy for hit in self.hits]
 
     def get_cluster_sector(self):
+        if sum(self.weights) == 0:
+            return -999.
         return sum([self.hits[i].sector * self.weights[i] for i in range(len(self.hits))]) / sum(self.weights)
 
     def get_cluster_pad(self):
+        if sum(self.weights) == 0:
+            return -999.
         return sum([self.hits[i].pad * self.weights[i] for i in range(len(self.hits))]) / sum(self.weights)
 
     def get_cluster_layer(self):
+        if sum(self.weights) == 0:
+            return -999.
         return sum([self.hits[i].layer * self.weights[i] for i in range(len(self.hits))]) / sum(self.weights)
 
     def get_cluster_x(self):
+        if sum(self.weights) == 0:
+            return -999.
         return sum([self.hits[i].x * self.weights[i] for i in range(len(self.hits))]) / sum(self.weights)
 
     def get_cluster_y(self):
+        if sum(self.weights) == 0:
+            return -999.
         return sum([self.hits[i].y * self.weights[i] for i in range(len(self.hits))]) / sum(self.weights)
 
     def get_n_pads(self):
@@ -454,19 +464,22 @@ def make_hits_lists(event):
             continue
 
         hit = Hit(id_arr[i], channel_arr[i], signal_arr[i])
+        sector = hit.sector
+        pad = hit.pad
+        layer = hit.layer
 
-        if (hit.pad < 20
-           or (hit.layer > 1 and (hit.energy < 1.4 or apv_nn_output[i] < 0.5))
-           or hit.sector == 0 or hit.sector == 3
-           or hit.layer == 7
-           or (hit.layer <= 1 and (signal_arr[i] < 0. or apv_nn_output[i] < 0.5))
-           or bad_pad(hit.sector, hit.pad, hit.layer)
-           or hit.sector < 0):  # THIS IS ESSENTIAL to exclude grounded channel!!!
+        if (pad < 20
+           or (layer > 1 and (hit.energy < 1.4 or apv_nn_output[i] < 0.5))
+           or sector == 0 or sector == 3
+           or layer == 7
+           or (layer <= 1 and (signal_arr[i] < 0. or apv_nn_output[i] < 0.5))
+           or bad_pad(sector, pad, layer)
+           or sector < 0):  # THIS IS ESSENTIAL to exclude grounded channel!!!
             continue
 
-        if hit.layer == 0:
+        if layer == 0:
             hits_tracker1.append(hit)
-        elif hit.layer == 1:
+        elif layer == 1:
             hits_tracker2.append(hit)
         else:
             hits_calorimeter.append(hit)
@@ -509,56 +522,35 @@ def make_clusters_list(towers_list, det):
     return clusters
 
 
-def main(beam_energy, run_type):
+def main(beam_energy):
     start_time = time.time()
 
     CalibGraphs.get_calib_graphs()
 
     tree = TChain("apv_reco")
-    if run_type == 1:
-        if beam_energy == 5:
-            tree.Add("../data_root_files/run737_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-            tree.Add("../data_root_files/run738_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-            tree.Add("../data_root_files/run739_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-            tree.Add("../data_root_files/run740_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-            tree.Add("../data_root_files/run741_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-            # 2nd energy scan
-            tree.Add("../data_root_files/run754_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-            tree.Add("../data_root_files/run755_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-            tree.Add("../data_root_files/run756_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-        elif beam_energy == 4:
-            tree.Add("../data_root_files/run742_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-            tree.Add("../data_root_files/run743_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-            tree.Add("../data_root_files/run744_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-        elif beam_energy == 3:
-            tree.Add("../data_root_files/run745_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-            tree.Add("../data_root_files/run746_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-        elif beam_energy == 2:
-            tree.Add("../data_root_files/run747_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-            tree.Add("../data_root_files/run748_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-        elif beam_energy == 1:
-            tree.Add("../data_root_files/run749_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-            tree.Add("../data_root_files/run750_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+    if beam_energy == 5:
+        tree.Add("../data_root_files/run588_tb16_mip_noise_nn_reg9_nocm_corr_fitw_tot_reco.root")
 
-    elif run_type == 2:
-        if beam_energy == 5:
-            tree.Add("../data_root_files/run754_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-            tree.Add("../data_root_files/run755_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-            tree.Add("../data_root_files/run756_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-        elif beam_energy == 4:
-            tree.Add("../data_root_files/run757_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-            tree.Add("../data_root_files/run758_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-        elif beam_energy == 3:
-            tree.Add("../data_root_files/run759_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-            tree.Add("../data_root_files/run760_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-        elif beam_energy == 2:
-            tree.Add("../data_root_files/run761_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-            tree.Add("../data_root_files/run762_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-        elif beam_energy == 1:
-            tree.Add("../data_root_files/run763_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-            tree.Add("../data_root_files/run764_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+        # tree.Add("../data_root_files/run737_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+        # tree.Add("../data_root_files/run738_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+        # tree.Add("../data_root_files/run739_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+        # tree.Add("../data_root_files/run740_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+        # tree.Add("../data_root_files/run741_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+    elif beam_energy == 4:
+        tree.Add("../data_root_files/run742_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+        tree.Add("../data_root_files/run743_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+        tree.Add("../data_root_files/run744_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+    elif beam_energy == 3:
+        tree.Add("../data_root_files/run745_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+        tree.Add("../data_root_files/run746_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+    elif beam_energy == 2:
+        tree.Add("../data_root_files/run747_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+        tree.Add("../data_root_files/run748_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+    elif beam_energy == 1:
+        tree.Add("../data_root_files/run749_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+        tree.Add("../data_root_files/run750_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
 
-    output_file = TFile('../extracted_root_files/extracted_data_{}gev.root'.format(beam_energy), "RECREATE")
+    output_file = TFile('../extracted_root_files/extracted_data_nocd_{}gev.root'.format(beam_energy), "RECREATE")
 
     output_tree = OutputTree()
     output_tree.define_arrays()
@@ -569,15 +561,14 @@ def main(beam_energy, run_type):
         # if idx == 1000:
         #     break
 
-        if idx % (10000) == 0:
+        if idx % (1000) == 0:
             time_min = (time.time() - start_time) // 60
             time_sec = (time.time() - start_time) % 60
             print('Event: {} out of {};'.format(idx, n_events), end=' ')
-            print('Event: {}'.format(idx), end=' ')
             print('{} min {} sec'.format(time_min, time_sec))
 
         hits_tr1, hits_tr2, hits_cal = make_hits_lists(event)
-        align_detector(hits_tr1, hits_tr2, hits_cal)
+        # align_detector(hits_tr1, hits_tr2, hits_cal)
 
         towers_tr1 = make_towers_list(hits_tr1)
         towers_tr2 = make_towers_list(hits_tr2)
@@ -672,7 +663,7 @@ def main(beam_energy, run_type):
 
 pr = cProfile.Profile()
 pr.enable()
-main(beam_energy=5, run_type=1)
+main(beam_energy=5)
 pr.disable()
 
 ps = pstats.Stats(pr).sort_stats(pstats.SortKey.CUMULATIVE)

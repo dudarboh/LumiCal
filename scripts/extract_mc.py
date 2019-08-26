@@ -44,12 +44,13 @@ def align_detector(hits_tr1, hits_tr2, hits_cal):
 
 
 class Hit:
-    def __init__(self, sector, pad, layer, bs, energy_in_mip):
+    def __init__(self, sector, pad, layer, n_bs_particles, n_dir_particles, energy_in_mip):
         self.sector = sector
         self.pad = pad
         self.layer = layer
         self.energy = energy_in_mip
-        self.bs = bs
+        self.n_bs_particles = n_bs_particles
+        self.n_dir_particles = n_dir_particles
         rho = 80. + 0.9 + 1.8 * self.pad
         phi = np.pi / 2 + np.pi / 12 - np.pi / 48 - np.pi / 24 * self.sector
         self.x = rho * np.cos(phi)
@@ -140,7 +141,8 @@ class OutputTree:
         self.tr1_hit_layer = array.array('i', [0] * 128)
         self.tr1_hit_x = array.array('f', [0.0] * 128)
         self.tr1_hit_y = array.array('f', [0.0] * 128)
-        self.tr1_hit_bs = array.array('i', [0] * 128)
+        self.tr1_hit_n_bs_particles = array.array('i', [0] * 128)
+        self.tr1_hit_n_dir_particles = array.array('i', [0] * 128)
         self.tr1_hit_energy = array.array('f', [0.0] * 128)
         self.tr1_n_clusters = array.array('i', [0])
         self.tr1_cluster_pad = array.array('f', [0.0] * 128)
@@ -157,7 +159,8 @@ class OutputTree:
         self.tr2_hit_layer = array.array('i', [0] * 128)
         self.tr2_hit_x = array.array('f', [0.0] * 128)
         self.tr2_hit_y = array.array('f', [0.0] * 128)
-        self.tr2_hit_bs = array.array('i', [0] * 128)
+        self.tr2_hit_n_bs_particles = array.array('i', [0] * 128)
+        self.tr2_hit_n_dir_particles = array.array('i', [0] * 128)
         self.tr2_hit_energy = array.array('f', [0.0] * 128)
         self.tr2_n_clusters = array.array('i', [0])
         self.tr2_cluster_pad = array.array('f', [0.0] * 128)
@@ -174,7 +177,8 @@ class OutputTree:
         self.cal_hit_layer = array.array('i', [0] * 128 * 5)
         self.cal_hit_x = array.array('f', [0.0] * 128 * 5)
         self.cal_hit_y = array.array('f', [0.0] * 128 * 5)
-        self.cal_hit_bs = array.array('i', [0] * 128)
+        self.cal_hit_n_bs_particles = array.array('i', [0] * 128)
+        self.cal_hit_n_dir_particles = array.array('i', [0] * 128)
         self.cal_hit_energy = array.array('f', [0.0] * 128 * 5)
         self.cal_n_towers = array.array('i', [0])
         self.cal_tower_pad = array.array('i', [0] * 128)
@@ -197,7 +201,8 @@ class OutputTree:
         self.tree.Branch('tr1_hit_layer', self.tr1_hit_layer, 'tr1_hit_layer[tr1_n_hits]/I')
         self.tree.Branch('tr1_hit_x', self.tr1_hit_x, 'tr1_hit_x[tr1_n_hits]/F')
         self.tree.Branch('tr1_hit_y', self.tr1_hit_y, 'tr1_hit_y[tr1_n_hits]/F')
-        self.tree.Branch('tr1_hit_bs', self.tr1_hit_bs, 'tr1_hit_bs[tr1_n_hits]/I')
+        self.tree.Branch('tr1_hit_n_bs_particles', self.tr1_hit_n_bs_particles, 'tr1_hit_n_bs_particles[tr1_n_hits]/I')
+        self.tree.Branch('tr1_hit_n_dir_particles', self.tr1_hit_n_dir_particles, 'tr1_hit_n_dir_particles[tr1_n_hits]/I')
         self.tree.Branch('tr1_hit_energy', self.tr1_hit_energy, 'tr1_hit_energy[tr1_n_hits]/F')
         self.tree.Branch('tr1_n_clusters', self.tr1_n_clusters, 'tr1_n_clusters/I')
         self.tree.Branch('tr1_cluster_pad', self.tr1_cluster_pad, 'tr1_cluster_pad[tr1_n_clusters]/F')
@@ -214,7 +219,8 @@ class OutputTree:
         self.tree.Branch('tr2_hit_layer', self.tr2_hit_layer, 'tr2_hit_layer[tr2_n_hits]/I')
         self.tree.Branch('tr2_hit_x', self.tr2_hit_x, 'tr2_hit_x[tr2_n_hits]/F')
         self.tree.Branch('tr2_hit_y', self.tr2_hit_y, 'tr2_hit_y[tr2_n_hits]/F')
-        self.tree.Branch('tr2_hit_bs', self.tr2_hit_bs, 'tr2_hit_bs[tr2_n_hits]/I')
+        self.tree.Branch('tr2_hit_n_bs_particles', self.tr2_hit_n_bs_particles, 'tr2_hit_n_bs_particles[tr2_n_hits]/I')
+        self.tree.Branch('tr2_hit_n_dir_particles', self.tr2_hit_n_dir_particles, 'tr2_hit_n_dir_particles[tr2_n_hits]/I')
         self.tree.Branch('tr2_hit_energy', self.tr2_hit_energy, 'tr2_hit_energy[tr2_n_hits]/F')
         self.tree.Branch('tr2_n_clusters', self.tr2_n_clusters, 'tr2_n_clusters/I')
         self.tree.Branch('tr2_cluster_pad', self.tr2_cluster_pad, 'tr2_cluster_pad[tr2_n_clusters]/F')
@@ -231,7 +237,8 @@ class OutputTree:
         self.tree.Branch('cal_hit_layer', self.cal_hit_layer, 'cal_hit_layer[cal_n_hits]/I')
         self.tree.Branch('cal_hit_x', self.cal_hit_x, 'cal_hit_x[cal_n_hits]/F')
         self.tree.Branch('cal_hit_y', self.cal_hit_y, 'cal_hit_y[cal_n_hits]/F')
-        self.tree.Branch('cal_hit_bs', self.cal_hit_bs, 'cal_hit_bs[cal_n_hits]/I')
+        self.tree.Branch('cal_hit_n_bs_particles', self.cal_hit_n_bs_particles, 'cal_hit_n_bs_particles[cal_n_hits]/I')
+        self.tree.Branch('cal_hit_n_dir_particles', self.cal_hit_n_dir_particles, 'cal_hit_n_dir_particles[cal_n_hits]/I')
         self.tree.Branch('cal_hit_energy', self.cal_hit_energy, 'cal_hit_energy[cal_n_hits]/F')
         self.tree.Branch('cal_n_towers', self.cal_n_towers, 'cal_n_towers/I')
         self.tree.Branch('cal_tower_pad', self.cal_tower_pad, 'cal_tower_pad[cal_n_towers]/I')
@@ -300,39 +307,32 @@ def make_hits_lists(event):
     hit_pad = event.hit_pad
     hit_layer = event.hit_layer
 
-    hit_energy_mev = event.hit_energy
-    hit_bs = event.hit_bs
-
-    S0 = 0.819
-    p1 = 2.166
-    p0 = 0.999 / 2.
+    hit_energy = event.hit_energy
+    n_bs_particles = event.n_bs_particles
+    n_dir_particles = event.n_dir_particles
 
     hits_tracker1 = []
     hits_tracker2 = []
     hits_calorimeter = []
 
     for i in range(n_hits):
-        hit_energy = hit_energy_mev[i] / 0.0885
-
-        # Implement noise in progress. Need to put not random number!
-        # hit_energy = random.gauss(hit_energy, 0.52353509)
 
         # Selection as in data
         if (hit_pad[i] < 20
-            or (hit_layer[i] > 1 and hit_energy < 1.4)
+            or (hit_layer[i] > 1 and hit_energy[i] < 1.4)
             or hit_layer[i] == 7
             or hit_sector[i] == 0 or hit_sector[i] == 3
-            or (hit_layer[i] <= 1 and hit_energy < 0.)
+            or (hit_layer[i] <= 1 and hit_energy[i] <= 0.)
             or bad_pad(hit_sector[i], hit_pad[i], hit_layer[i])):
             continue
 
-        # Calorimeter efficiency simulation
-        if hit_layer[i] > 1:
-            if random.random() > (1. + math.erf((hit_energy - S0) / p1)) * p0:
-                continue
+        # Calorimeter efficiency simulation ### THIS IS IMPLEMENTED IN MC
+        # if hit_layer[i] > 1:
+        #     if random.random() > (1. + math.erf((hit_energy[i] - S0) / p1)) * p0:
+        #         continue
 
         # If passed the selection create hit and add to corresponding list
-        hit = Hit(hit_sector[i], hit_pad[i], hit_layer[i], hit_bs[i], hit_energy)
+        hit = Hit(hit_sector[i], hit_pad[i], hit_layer[i], n_bs_particles[i], n_dir_particles[i], hit_energy[i])
 
         if hit.layer == 0:
             hits_tracker1.append(hit)
@@ -382,11 +382,11 @@ def make_clusters_list(towers_list, det):
 def main():
     start_time = time.time()
 
-    file = TFile.Open('../mc_root_files/lucas_tb16_5gev.root')
+    file = TFile.Open('../mc_root_files/lucas_1gev_0.root')
     tree = file.LumiCal
     print("Total n events in loaded files: ", tree.GetEntries())
 
-    output_file = TFile("../extracted_root_files/extracted_mc_5gev.root", "RECREATE")
+    output_file = TFile("../extracted_root_files/extracted_mc_1gev.root", "RECREATE")
     output_file.cd()
 
     output_tree = OutputTree()
@@ -397,7 +397,7 @@ def main():
         # if idx == 200000:
         #     break
 
-        if idx % (10000) == 0:
+        if idx % (1000) == 0:
             time_min = (time.time() - start_time) // 60
             time_sec = (time.time() - start_time) % 60
             print('Event: {} out of {};'.format(idx, tree.GetEntries()), end=' ')
@@ -436,7 +436,8 @@ def main():
             output_tree.tr1_hit_layer[i] = hit.layer
             output_tree.tr1_hit_x[i] = hit.x
             output_tree.tr1_hit_y[i] = hit.y
-            output_tree.tr1_hit_bs[i] = hit.bs
+            output_tree.tr1_hit_n_bs_particles[i] = hit.n_bs_particles
+            output_tree.tr1_hit_n_dir_particles[i] = hit.n_dir_particles
             output_tree.tr1_hit_energy[i] = hit.energy
         output_tree.tr1_n_clusters[0] = len(clusters_tr1)
         for i, cluster in enumerate(clusters_tr1):
@@ -455,7 +456,8 @@ def main():
             output_tree.tr2_hit_layer[i] = hit.layer
             output_tree.tr2_hit_x[i] = hit.x
             output_tree.tr2_hit_y[i] = hit.y
-            output_tree.tr2_hit_bs[i] = hit.bs
+            output_tree.tr2_hit_n_bs_particles[i] = hit.n_bs_particles
+            output_tree.tr2_hit_n_dir_particles[i] = hit.n_dir_particles
             output_tree.tr2_hit_energy[i] = hit.energy
         output_tree.tr2_n_clusters[0] = len(clusters_tr2)
         for i, cluster in enumerate(clusters_tr2):
@@ -474,7 +476,8 @@ def main():
             output_tree.cal_hit_layer[i] = hit.layer
             output_tree.cal_hit_x[i] = hit.x
             output_tree.cal_hit_y[i] = hit.y
-            output_tree.cal_hit_bs[i] = hit.bs
+            output_tree.cal_hit_n_bs_particles[i] = hit.n_bs_particles
+            output_tree.cal_hit_n_dir_particles[i] = hit.n_dir_particles
             output_tree.cal_hit_energy[i] = hit.energy
         output_tree.cal_n_towers[0] = len(towers_cal)
         for i, tower in enumerate(towers_cal):

@@ -20,3 +20,4 @@
 # scp bohdan@alzt.tau.ac.il:/data/alzta/aborysov/tb_2016_data/code/tb16_reco_cd_tr_nn_wfita/run763_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root ./data_root_files/
 # scp bohdan@alzt.tau.ac.il:/data/alzta/aborysov/tb_2016_data/code/tb16_reco_cd_tr_nn_wfita/run764_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root ./data_root_files/
 
+scp bohdan@alzt.tau.ac.il:/data/alzta/aborysov/tb_2016_data/code/tb16_reco_nn_fitwa/run588_tb16_mip_noise_nn_reg9_nocm_corr_fitw_tot_reco.root ./data_root_files/
