@@ -326,11 +326,6 @@ def make_hits_lists(event):
             or bad_pad(hit_sector[i], hit_pad[i], hit_layer[i])):
             continue
 
-        # Calorimeter efficiency simulation ### THIS IS IMPLEMENTED IN MC
-        # if hit_layer[i] > 1:
-        #     if random.random() > (1. + math.erf((hit_energy[i] - S0) / p1)) * p0:
-        #         continue
-
         # If passed the selection create hit and add to corresponding list
         hit = Hit(hit_sector[i], hit_pad[i], hit_layer[i], n_bs_particles[i], n_dir_particles[i], hit_energy[i])
 
@@ -379,14 +374,13 @@ def make_clusters_list(towers_list, det):
     return clusters
 
 
-def main():
+def main(filename):
     start_time = time.time()
-
-    file = TFile.Open('../mc_root_files/lucas_1gev_0.root')
+    file = TFile.Open('../mc_root_files/test_phys_models/' + filename)
     tree = file.LumiCal
     print("Total n events in loaded files: ", tree.GetEntries())
 
-    output_file = TFile("../extracted_root_files/extracted_mc_1gev.root", "RECREATE")
+    output_file = TFile("../extracted_root_files/test_phys_models/extracted_" + filename, "RECREATE")
     output_file.cd()
 
     output_tree = OutputTree()
@@ -394,10 +388,10 @@ def main():
     output_tree.define_branches()
 
     for idx, event in enumerate(tree):
-        # if idx == 200000:
-        #     break
+        if idx == 200000:
+            break
 
-        if idx % (1000) == 0:
+        if idx % (20000) == 0:
             time_min = (time.time() - start_time) // 60
             time_sec = (time.time() - start_time) % 60
             print('Event: {} out of {};'.format(idx, tree.GetEntries()), end=' ')
@@ -503,10 +497,30 @@ def main():
     print("Hooray, extracted tree file is ready, take it :3")
 
 
-pr = cProfile.Profile()
-pr.enable()
-main()
-pr.disable()
+# pr = cProfile.Profile()
+# pr.enable()
+main('lucas_5gev_def_phys.root')
+main('lucas_5gev_emy_phys.root')
+main('lucas_5gev_emz_phys.root')
 
-ps = pstats.Stats(pr).sort_stats(pstats.SortKey.CUMULATIVE)
-ps.print_stats()
+main('lucas_4gev_def_phys.root')
+main('lucas_4gev_emy_phys.root')
+main('lucas_4gev_emz_phys.root')
+
+main('lucas_3gev_def_phys.root')
+main('lucas_3gev_emy_phys.root')
+main('lucas_3gev_emz_phys.root')
+
+main('lucas_2gev_def_phys.root')
+main('lucas_2gev_emy_phys.root')
+main('lucas_2gev_emz_phys.root')
+
+
+main('lucas_1gev_def_phys.root')
+main('lucas_1gev_emy_phys.root')
+main('lucas_1gev_emz_phys.root')
+
+# pr.disable()
+
+# ps = pstats.Stats(pr).sort_stats(pstats.SortKey.CUMULATIVE)
+# ps.print_stats()

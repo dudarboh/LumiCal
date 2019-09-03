@@ -161,7 +161,7 @@ class CalibGraphs:
                     y_err.append(float(line.split('  ')[2]))
 
             x = np.array(x)
-            y = np.array(y) * 10.
+            y = np.array(y) * 19.206
             x_err = np.array(x_err)
             y_err = np.array(y_err)
 
@@ -460,7 +460,8 @@ def make_hits_lists(event):
         if (apv_fit_tau[i] < 1 or apv_fit_tau[i] > 3
            or signal_arr[i] > 2000.
            or apv_fit_t0[i] < (apv_bint1[i] - 2.7)
-           or apv_fit_t0[i] > (apv_bint1[i] - 0.5)):
+           or apv_fit_t0[i] > (apv_bint1[i] - 0.5)
+           or apv_nn_output[i] < 0.5):
             continue
 
         hit = Hit(id_arr[i], channel_arr[i], signal_arr[i])
@@ -469,10 +470,10 @@ def make_hits_lists(event):
         layer = hit.layer
 
         if (pad < 20
-           or (layer > 1 and (hit.energy < 1.4 or apv_nn_output[i] < 0.5))
+           or (layer > 1 and hit.energy < 1.4)
            or sector == 0 or sector == 3
            or layer == 7
-           or (layer <= 1 and (signal_arr[i] < 0. or apv_nn_output[i] < 0.5))
+           or (layer <= 1 and signal_arr[i] < 0.)
            or bad_pad(sector, pad, layer)
            or sector < 0):  # THIS IS ESSENTIAL to exclude grounded channel!!!
             continue
@@ -529,13 +530,14 @@ def main(beam_energy):
 
     tree = TChain("apv_reco")
     if beam_energy == 5:
-        tree.Add("../data_root_files/run588_tb16_mip_noise_nn_reg9_nocm_corr_fitw_tot_reco.root")
+        # No CD run. Need to divide calibration by 4.4
+        # tree.Add("../data_root_files/run588_tb16_mip_noise_nn_reg9_nocm_corr_fitw_tot_reco.root")
 
-        # tree.Add("../data_root_files/run737_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-        # tree.Add("../data_root_files/run738_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-        # tree.Add("../data_root_files/run739_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-        # tree.Add("../data_root_files/run740_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-        # tree.Add("../data_root_files/run741_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+        tree.Add("../data_root_files/run737_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+        tree.Add("../data_root_files/run738_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+        tree.Add("../data_root_files/run739_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+        tree.Add("../data_root_files/run740_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+        tree.Add("../data_root_files/run741_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
     elif beam_energy == 4:
         tree.Add("../data_root_files/run742_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
         tree.Add("../data_root_files/run743_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
@@ -550,7 +552,7 @@ def main(beam_energy):
         tree.Add("../data_root_files/run749_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
         tree.Add("../data_root_files/run750_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
 
-    output_file = TFile('../extracted_root_files/extracted_data_nocd_{}gev.root'.format(beam_energy), "RECREATE")
+    output_file = TFile('../extracted_root_files/extracted_data_{}gev.root'.format(beam_energy), "RECREATE")
 
     output_tree = OutputTree()
     output_tree.define_arrays()
@@ -568,7 +570,7 @@ def main(beam_energy):
             print('{} min {} sec'.format(time_min, time_sec))
 
         hits_tr1, hits_tr2, hits_cal = make_hits_lists(event)
-        # align_detector(hits_tr1, hits_tr2, hits_cal)
+        align_detector(hits_tr1, hits_tr2, hits_cal)
 
         towers_tr1 = make_towers_list(hits_tr1)
         towers_tr2 = make_towers_list(hits_tr2)
