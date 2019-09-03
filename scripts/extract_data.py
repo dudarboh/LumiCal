@@ -25,7 +25,7 @@
 # # 8 layers: 0, 1 - trackers; 2, 3, 4, 5, 6, 7 - calorimeter; 7 - tab (bad)
 
 
-from ROOT import TFile, TTree, TChain, TGraphErrors
+from ROOT import TFile, TTree, TChain, TGraphErrors, gROOT
 import array
 import time
 import numpy as np
@@ -33,6 +33,9 @@ from itertools import islice
 
 import cProfile
 import pstats
+
+
+
 
 
 def bad_pad(sector, pad, layer):
@@ -136,7 +139,7 @@ class ApvMaps:
 
 
 class CalibGraphs:
-    '''APV calibration. To convert Volts to MIPs'''
+    '''ADC calibration. To convert Volts to MIPs'''
     # path on alzt.tau.ac.il server = '/data/alzta/aborysov/tb_2016_data/code/lumical_clust/fcalib/'
     calib_graphs = []
 
@@ -182,7 +185,7 @@ class Hit:
         if apv_id < 4:
             apv_map = ApvMaps.tb15_slave if apv_id % 2 == 1 else ApvMaps.tb15_master
 
-        elif apv_id >= 4 and apv_id < 14:
+        elif 4 <= apv_id < 14:
             apv_map = ApvMaps.tb16_slave_divider if apv_id % 2 == 1 else ApvMaps.tb16_master_divider
 
         elif apv_id == 14:
@@ -517,43 +520,26 @@ def make_clusters_list(towers_list, det):
     # Sort to start merging the most energetic ones
     clusters.sort(key=lambda x: x.energy, reverse=True)
 
-    merge_clusters(clusters)
-    clusters.sort(key=lambda x: x.energy, reverse=True)
+    # merge_clusters(clusters)
+    # clusters.sort(key=lambda x: x.energy, reverse=True)
 
     return clusters
 
 
-def main(beam_energy):
+def main(input_file):
     start_time = time.time()
 
+    # Upload calibration curves from txt files into TGraphs
     CalibGraphs.get_calib_graphs()
 
-    tree = TChain("apv_reco")
-    if beam_energy == 5:
-        # No CD run. Need to divide calibration by 4.4
-        # tree.Add("../data_root_files/run588_tb16_mip_noise_nn_reg9_nocm_corr_fitw_tot_reco.root")
+    # Upload data for analysis
+    file = TFile.Open(input_file, "READ")
+    tree = file.apv_reco
 
-        tree.Add("../data_root_files/run737_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-        tree.Add("../data_root_files/run738_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-        tree.Add("../data_root_files/run739_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-        tree.Add("../data_root_files/run740_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-        tree.Add("../data_root_files/run741_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-    elif beam_energy == 4:
-        tree.Add("../data_root_files/run742_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-        tree.Add("../data_root_files/run743_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-        tree.Add("../data_root_files/run744_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-    elif beam_energy == 3:
-        tree.Add("../data_root_files/run745_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-        tree.Add("../data_root_files/run746_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-    elif beam_energy == 2:
-        tree.Add("../data_root_files/run747_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-        tree.Add("../data_root_files/run748_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-    elif beam_energy == 1:
-        tree.Add("../data_root_files/run749_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
-        tree.Add("../data_root_files/run750_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+    # Create output root file
+    output_file = TFile('../extracted_root_files/extracted_data_RENAME.root', "RECREATE")
 
-    output_file = TFile('../extracted_root_files/extracted_data_{}gev.root'.format(beam_energy), "RECREATE")
-
+    # Create output tree. Define all variables and all branches to be filled
     output_tree = OutputTree()
     output_tree.define_arrays()
     output_tree.define_branches()
@@ -665,8 +651,35 @@ def main(beam_energy):
 
 pr = cProfile.Profile()
 pr.enable()
-main(beam_energy=5)
+main("../data_root_files/photon_runs/run788-804_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
 pr.disable()
 
 ps = pstats.Stats(pr).sort_stats(pstats.SortKey.CUMULATIVE)
 ps.print_stats()
+
+
+# No CD run. Need to divide calibration by 4.4
+# 5 GeV
+# "../data_root_files/run588_tb16_mip_noise_nn_reg9_nocm_corr_fitw_tot_reco.root"
+
+# Electron runs
+# 5 GeV
+# "../data_root_files/run737_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
+# "../data_root_files/run738_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
+# "../data_root_files/run739_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
+# "../data_root_files/run740_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
+# "../data_root_files/run741_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
+
+# 4 GeV
+# "../data_root_files/run742_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
+# "../data_root_files/run743_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
+# "../data_root_files/run744_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
+# # 3 GeV
+# "../data_root_files/run745_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
+# "../data_root_files/run746_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
+# # 2 GeV
+# "../data_root_files/run747_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
+# "../data_root_files/run748_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
+# # 1 GeV
+# "../data_root_files/run749_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
+# "../data_root_files/run750_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
