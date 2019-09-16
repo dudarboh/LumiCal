@@ -31,7 +31,7 @@ def main():
             phi_max = phi_min + 7.
 
             pad_vols[sector][pad] = geom.MakeTubs("pad_vol_{}_{}".format(sector, pad), Al, r_in_pad, r_out_pad, 0.320, phi_min, phi_max)
-            pad_vols[sector][pad].SetLineColor(19)
+            pad_vols[sector][pad].SetLineColor(2)
 
             sensor.AddNode(pad_vols[sector][pad], sector * 64 + pad, rotation)
 

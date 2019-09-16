@@ -35,9 +35,6 @@ import cProfile
 import pstats
 
 
-
-
-
 def bad_pad(sector, pad, layer):
     return ((layer == 0 and sector == 1 and pad in (26, 61))
             or (layer == 0 and sector == 2 and pad in (31, 57, 61))
@@ -164,7 +161,17 @@ class CalibGraphs:
                     y_err.append(float(line.split('  ')[2]))
 
             x = np.array(x)
-            y = np.array(y) * 19.206
+            # Calibration for trackers APV's are manualy scaled to match MC MPV hit energy
+            if i == 0:
+                y = np.array(y) * 19.54364863654917
+            elif i == 1:
+                y = np.array(y) * 18.303542363112417
+            elif i == 2:
+                y = np.array(y) * 21.093676081159632
+            elif i == 3:
+                y = np.array(y) * 20.77784418996082
+            else:
+                y = np.array(y) * 19.206
             x_err = np.array(x_err)
             y_err = np.array(y_err)
 
@@ -473,7 +480,7 @@ def make_hits_lists(event):
         layer = hit.layer
 
         if (pad < 20
-           or (layer > 1 and hit.energy < 1.4)
+           or (layer > 1 and hit.energy <= 0.)
            or sector == 0 or sector == 3
            or layer == 7
            or (layer <= 1 and signal_arr[i] < 0.)
@@ -520,8 +527,8 @@ def make_clusters_list(towers_list, det):
     # Sort to start merging the most energetic ones
     clusters.sort(key=lambda x: x.energy, reverse=True)
 
-    # merge_clusters(clusters)
-    # clusters.sort(key=lambda x: x.energy, reverse=True)
+    merge_clusters(clusters)
+    clusters.sort(key=lambda x: x.energy, reverse=True)
 
     return clusters
 
@@ -651,7 +658,11 @@ def main(input_file):
 
 pr = cProfile.Profile()
 pr.enable()
-main("../data_root_files/photon_runs/run788-804_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root")
+# main("../data_root_files/run737_741_5gev.root")
+# main("../data_root_files/run742_744_4gev.root")
+# main("../data_root_files/run745_746_3gev.root")
+# main("../data_root_files/run747_748_2gev.root")
+main("../data_root_files/run749_750_1gev.root")
 pr.disable()
 
 ps = pstats.Stats(pr).sort_stats(pstats.SortKey.CUMULATIVE)
@@ -661,25 +672,5 @@ ps.print_stats()
 # No CD run. Need to divide calibration by 4.4
 # 5 GeV
 # "../data_root_files/run588_tb16_mip_noise_nn_reg9_nocm_corr_fitw_tot_reco.root"
-
-# Electron runs
-# 5 GeV
-# "../data_root_files/run737_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
-# "../data_root_files/run738_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
-# "../data_root_files/run739_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
-# "../data_root_files/run740_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
-# "../data_root_files/run741_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
-
-# 4 GeV
-# "../data_root_files/run742_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
-# "../data_root_files/run743_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
-# "../data_root_files/run744_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
-# # 3 GeV
-# "../data_root_files/run745_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
-# "../data_root_files/run746_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
-# # 2 GeV
-# "../data_root_files/run747_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
-# "../data_root_files/run748_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
-# # 1 GeV
-# "../data_root_files/run749_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
-# "../data_root_files/run750_tb16_charge_div_nn_reg9_nocm_corr_wfita_reco.root"
+# Phton runs with no VETO
+# runs_767_786.root

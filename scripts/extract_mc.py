@@ -318,10 +318,10 @@ def make_hits_lists(event):
     for i in range(n_hits):
 
         # Selection as in data
-        if (hit_pad[i] < 20
-            or (hit_layer[i] > 1 and hit_energy[i] < 1.4)
+        if ((hit_layer[i] > 1 and hit_energy[i] < 1.4)
+            # or hit_pad[i] < 20
             or hit_layer[i] == 7
-            or hit_sector[i] == 0 or hit_sector[i] == 3
+            # or hit_sector[i] == 0 or hit_sector[i] == 3
             or (hit_layer[i] <= 1 and hit_energy[i] <= 0.)
             or bad_pad(hit_sector[i], hit_pad[i], hit_layer[i])):
             continue
@@ -376,11 +376,11 @@ def make_clusters_list(towers_list, det):
 
 def main(filename):
     start_time = time.time()
-    file = TFile.Open('../mc_root_files/test_phys_models/' + filename)
+    file = TFile.Open('../mc_root_files/' + filename)
     tree = file.LumiCal
     print("Total n events in loaded files: ", tree.GetEntries())
 
-    output_file = TFile("../extracted_root_files/test_phys_models/extracted_" + filename, "RECREATE")
+    output_file = TFile("../extracted_root_files/extracted_" + filename, "RECREATE")
     output_file.cd()
 
     output_tree = OutputTree()
@@ -388,8 +388,8 @@ def main(filename):
     output_tree.define_branches()
 
     for idx, event in enumerate(tree):
-        if idx == 200000:
-            break
+        # if idx == 200000:
+        #     break
 
         if idx % (20000) == 0:
             time_min = (time.time() - start_time) // 60
@@ -497,30 +497,15 @@ def main(filename):
     print("Hooray, extracted tree file is ready, take it :3")
 
 
-# pr = cProfile.Profile()
-# pr.enable()
-main('lucas_5gev_def_phys.root')
-main('lucas_5gev_emy_phys.root')
-main('lucas_5gev_emz_phys.root')
+pr = cProfile.Profile()
+pr.enable()
+main('lucas_5gev.root')
+main('lucas_4gev.root')
+main('lucas_3gev.root')
+main('lucas_2gev.root')
+main('lucas_1gev.root')
 
-main('lucas_4gev_def_phys.root')
-main('lucas_4gev_emy_phys.root')
-main('lucas_4gev_emz_phys.root')
+pr.disable()
 
-main('lucas_3gev_def_phys.root')
-main('lucas_3gev_emy_phys.root')
-main('lucas_3gev_emz_phys.root')
-
-main('lucas_2gev_def_phys.root')
-main('lucas_2gev_emy_phys.root')
-main('lucas_2gev_emz_phys.root')
-
-
-main('lucas_1gev_def_phys.root')
-main('lucas_1gev_emy_phys.root')
-main('lucas_1gev_emz_phys.root')
-
-# pr.disable()
-
-# ps = pstats.Stats(pr).sort_stats(pstats.SortKey.CUMULATIVE)
-# ps.print_stats()
+ps = pstats.Stats(pr).sort_stats(pstats.SortKey.CUMULATIVE)
+ps.print_stats()
