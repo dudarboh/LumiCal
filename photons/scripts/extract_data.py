@@ -34,112 +34,6 @@ from itertools import islice
 import cProfile
 import pstats
 
-# Create output tree
-output_tree = TTree('data', 'Extracted Data')
-
-# Create variables associated with the output tree
-tr1_n_hits = array.array('i', [0])
-tr1_hit_pad = array.array('i', [0] * 128)
-tr1_hit_sector = array.array('i', [0] * 128)
-tr1_hit_layer = array.array('i', [0] * 128)
-tr1_hit_x = array.array('f', [0.0] * 128)
-tr1_hit_y = array.array('f', [0.0] * 128)
-tr1_hit_energy = array.array('f', [0.0] * 128)
-tr1_n_clusters = array.array('i', [0])
-tr1_cluster_pad = array.array('f', [0.0] * 128)
-tr1_cluster_sector = array.array('f', [0.0] * 128)
-tr1_cluster_layer = array.array('f', [0.0] * 128)
-tr1_cluster_x = array.array('f', [0.0] * 128)
-tr1_cluster_y = array.array('f', [0.0] * 128)
-tr1_cluster_energy = array.array('f', [0.0] * 128)
-
-tr2_n_hits = array.array('i', [0])
-tr2_hit_pad = array.array('i', [0] * 128)
-tr2_hit_sector = array.array('i', [0] * 128)
-tr2_hit_layer = array.array('i', [0] * 128)
-tr2_hit_x = array.array('f', [0.0] * 128)
-tr2_hit_y = array.array('f', [0.0] * 128)
-tr2_hit_energy = array.array('f', [0.0] * 128)
-tr2_n_clusters = array.array('i', [0])
-tr2_cluster_pad = array.array('f', [0.0] * 128)
-tr2_cluster_sector = array.array('f', [0.0] * 128)
-tr2_cluster_layer = array.array('f', [0.0] * 128)
-tr2_cluster_x = array.array('f', [0.0] * 128)
-tr2_cluster_y = array.array('f', [0.0] * 128)
-tr2_cluster_energy = array.array('f', [0.0] * 128)
-
-cal_n_hits = array.array('i', [0])
-cal_hit_pad = array.array('i', [0] * 128 * 5)
-cal_hit_sector = array.array('i', [0] * 128 * 5)
-cal_hit_layer = array.array('i', [0] * 128 * 5)
-cal_hit_x = array.array('f', [0.0] * 128 * 5)
-cal_hit_y = array.array('f', [0.0] * 128 * 5)
-cal_hit_energy = array.array('f', [0.0] * 128 * 5)
-cal_n_towers = array.array('i', [0])
-cal_tower_pad = array.array('i', [0] * 128)
-cal_tower_sector = array.array('i', [0] * 128)
-cal_tower_energy = array.array('f', [0.0] * 128)
-cal_tower_cluster = array.array('i', [0] * 128)
-cal_n_clusters = array.array('i', [0])
-cal_cluster_pad = array.array('f', [0.0] * 128 * 5)
-cal_cluster_sector = array.array('f', [0.0] * 128 * 5)
-cal_cluster_layer = array.array('f', [0.0] * 128 * 5)
-cal_cluster_x = array.array('f', [0.0] * 128 * 5)
-cal_cluster_y = array.array('f', [0.0] * 128 * 5)
-cal_cluster_energy = array.array('f', [0.0] * 128 * 5)
-
-# Create branches in the output tree for these variables
-output_tree.Branch('tr1_n_hits', tr1_n_hits, 'tr1_n_hits/I')
-output_tree.Branch('tr1_hit_pad', tr1_hit_pad, 'tr1_hit_pad[tr1_n_hits]/I')
-output_tree.Branch('tr1_hit_sector', tr1_hit_sector, 'tr1_hit_sector[tr1_n_hits]/I')
-output_tree.Branch('tr1_hit_layer', tr1_hit_layer, 'tr1_hit_layer[tr1_n_hits]/I')
-output_tree.Branch('tr1_hit_x', tr1_hit_x, 'tr1_hit_x[tr1_n_hits]/F')
-output_tree.Branch('tr1_hit_y', tr1_hit_y, 'tr1_hit_y[tr1_n_hits]/F')
-output_tree.Branch('tr1_hit_energy', tr1_hit_energy, 'tr1_hit_energy[tr1_n_hits]/F')
-output_tree.Branch('tr1_n_clusters', tr1_n_clusters, 'tr1_n_clusters/I')
-output_tree.Branch('tr1_cluster_pad', tr1_cluster_pad, 'tr1_cluster_pad[tr1_n_clusters]/F')
-output_tree.Branch('tr1_cluster_sector', tr1_cluster_sector, 'tr1_cluster_sector[tr1_n_clusters]/F')
-output_tree.Branch('tr1_cluster_layer', tr1_cluster_layer, 'tr1_cluster_layer[tr1_n_clusters]/F')
-output_tree.Branch('tr1_cluster_x', tr1_cluster_x, 'tr1_cluster_x[tr1_n_clusters]/F')
-output_tree.Branch('tr1_cluster_y', tr1_cluster_y, 'tr1_cluster_y[tr1_n_clusters]/F')
-output_tree.Branch('tr1_cluster_energy', tr1_cluster_energy, 'tr1_cluster_energy[tr1_n_clusters]/F')
-
-output_tree.Branch('tr2_n_hits', tr2_n_hits, 'tr2_n_hits/I')
-output_tree.Branch('tr2_hit_pad', tr2_hit_pad, 'tr2_hit_pad[tr2_n_hits]/I')
-output_tree.Branch('tr2_hit_sector', tr2_hit_sector, 'tr2_hit_sector[tr2_n_hits]/I')
-output_tree.Branch('tr2_hit_layer', tr2_hit_layer, 'tr2_hit_layer[tr2_n_hits]/I')
-output_tree.Branch('tr2_hit_x', tr2_hit_x, 'tr2_hit_x[tr2_n_hits]/F')
-output_tree.Branch('tr2_hit_y', tr2_hit_y, 'tr2_hit_y[tr2_n_hits]/F')
-output_tree.Branch('tr2_hit_energy', tr2_hit_energy, 'tr2_hit_energy[tr2_n_hits]/F')
-output_tree.Branch('tr2_n_clusters', tr2_n_clusters, 'tr2_n_clusters/I')
-output_tree.Branch('tr2_cluster_pad', tr2_cluster_pad, 'tr2_cluster_pad[tr2_n_clusters]/F')
-output_tree.Branch('tr2_cluster_sector', tr2_cluster_sector, 'tr2_cluster_sector[tr2_n_clusters]/F')
-output_tree.Branch('tr2_cluster_layer', tr2_cluster_layer, 'tr2_cluster_layer[tr2_n_clusters]/F')
-output_tree.Branch('tr2_cluster_x', tr2_cluster_x, 'tr2_cluster_x[tr2_n_clusters]/F')
-output_tree.Branch('tr2_cluster_y', tr2_cluster_y, 'tr2_cluster_y[tr2_n_clusters]/F')
-output_tree.Branch('tr2_cluster_energy', tr2_cluster_energy, 'tr2_cluster_energy[tr2_n_clusters]/F')
-
-output_tree.Branch('cal_n_hits', cal_n_hits, 'cal_n_hits/I')
-output_tree.Branch('cal_hit_pad', cal_hit_pad, 'cal_hit_pad[cal_n_hits]/I')
-output_tree.Branch('cal_hit_sector', cal_hit_sector, 'cal_hit_sector[cal_n_hits]/I')
-output_tree.Branch('cal_hit_layer', cal_hit_layer, 'cal_hit_layer[cal_n_hits]/I')
-output_tree.Branch('cal_hit_x', cal_hit_x, 'cal_hit_x[cal_n_hits]/F')
-output_tree.Branch('cal_hit_y', cal_hit_y, 'cal_hit_y[cal_n_hits]/F')
-output_tree.Branch('cal_hit_energy', cal_hit_energy, 'cal_hit_energy[cal_n_hits]/F')
-output_tree.Branch('cal_n_towers', cal_n_towers, 'cal_n_towers/I')
-output_tree.Branch('cal_tower_pad', cal_tower_pad, 'cal_tower_pad[cal_n_towers]/I')
-output_tree.Branch('cal_tower_sector', cal_tower_sector, 'cal_tower_sector[cal_n_towers]/I')
-output_tree.Branch('cal_tower_energy', cal_tower_energy, 'cal_tower_energy[cal_n_towers]/F')
-output_tree.Branch('cal_tower_cluster', cal_tower_cluster, 'cal_tower_cluster[cal_n_towers]/I')
-output_tree.Branch('cal_n_clusters', cal_n_clusters, 'cal_n_clusters/I')
-output_tree.Branch('cal_cluster_pad', cal_cluster_pad, 'cal_cluster_pad[cal_n_clusters]/F')
-output_tree.Branch('cal_cluster_sector', cal_cluster_sector, 'cal_cluster_sector[cal_n_clusters]/F')
-output_tree.Branch('cal_cluster_layer', cal_cluster_layer, 'cal_cluster_layer[cal_n_clusters]/F')
-output_tree.Branch('cal_cluster_x', cal_cluster_x, 'cal_cluster_x[cal_n_clusters]/F')
-output_tree.Branch('cal_cluster_y', cal_cluster_y, 'cal_cluster_y[cal_n_clusters]/F')
-output_tree.Branch('cal_cluster_energy', cal_cluster_energy, 'cal_cluster_energy[cal_n_clusters]/F')
-
-
 calib_graphs = []
 
 
@@ -458,7 +352,7 @@ def make_hits_lists(event):
         layer = hit.layer
 
         if (pad < 20
-           or (layer > 1 and hit.energy <= 0.)
+           or (layer > 1 and hit.energy <= .5)
            or sector == 0 or sector == 3
            or layer == 7
            or (layer <= 1 and signal < 0.)
@@ -506,8 +400,8 @@ def make_clusters_list(towers_list, det):
     # Sort to start merging the most energetic ones
     clusters.sort(key=lambda x: x.energy, reverse=True)
 
-    merge_clusters(clusters)
-    clusters.sort(key=lambda x: x.energy, reverse=True)
+    # merge_clusters(clusters)
+    # clusters.sort(key=lambda x: x.energy, reverse=True)
 
     return clusters
 
@@ -519,12 +413,118 @@ def main(root_file):
     input_file = TFile.Open(root_file, "READ")
     input_tree = input_file.apv_reco
 
-    # Create output root file
+    # Create output root file.
+    # Create output root file before the tree!!! It prevents memory leakage
     output_file = TFile('../extracted/extracted_data_RENAME.root', "RECREATE")
+
+    # Create output tree
+    output_tree = TTree('data', 'Extracted Data')
+
+    # Create variables associated with the output tree
+    tr1_n_hits = array.array('i', [0])
+    tr1_hit_pad = array.array('i', [0] * 128)
+    tr1_hit_sector = array.array('i', [0] * 128)
+    tr1_hit_layer = array.array('i', [0] * 128)
+    tr1_hit_x = array.array('f', [0.0] * 128)
+    tr1_hit_y = array.array('f', [0.0] * 128)
+    tr1_hit_energy = array.array('f', [0.0] * 128)
+    tr1_n_clusters = array.array('i', [0])
+    tr1_cluster_pad = array.array('f', [0.0] * 128)
+    tr1_cluster_sector = array.array('f', [0.0] * 128)
+    tr1_cluster_layer = array.array('f', [0.0] * 128)
+    tr1_cluster_x = array.array('f', [0.0] * 128)
+    tr1_cluster_y = array.array('f', [0.0] * 128)
+    tr1_cluster_energy = array.array('f', [0.0] * 128)
+
+    tr2_n_hits = array.array('i', [0])
+    tr2_hit_pad = array.array('i', [0] * 128)
+    tr2_hit_sector = array.array('i', [0] * 128)
+    tr2_hit_layer = array.array('i', [0] * 128)
+    tr2_hit_x = array.array('f', [0.0] * 128)
+    tr2_hit_y = array.array('f', [0.0] * 128)
+    tr2_hit_energy = array.array('f', [0.0] * 128)
+    tr2_n_clusters = array.array('i', [0])
+    tr2_cluster_pad = array.array('f', [0.0] * 128)
+    tr2_cluster_sector = array.array('f', [0.0] * 128)
+    tr2_cluster_layer = array.array('f', [0.0] * 128)
+    tr2_cluster_x = array.array('f', [0.0] * 128)
+    tr2_cluster_y = array.array('f', [0.0] * 128)
+    tr2_cluster_energy = array.array('f', [0.0] * 128)
+
+    cal_n_hits = array.array('i', [0])
+    cal_hit_pad = array.array('i', [0] * 128 * 5)
+    cal_hit_sector = array.array('i', [0] * 128 * 5)
+    cal_hit_layer = array.array('i', [0] * 128 * 5)
+    cal_hit_x = array.array('f', [0.0] * 128 * 5)
+    cal_hit_y = array.array('f', [0.0] * 128 * 5)
+    cal_hit_energy = array.array('f', [0.0] * 128 * 5)
+    cal_n_towers = array.array('i', [0])
+    cal_tower_pad = array.array('i', [0] * 128)
+    cal_tower_sector = array.array('i', [0] * 128)
+    cal_tower_energy = array.array('f', [0.0] * 128)
+    cal_tower_cluster = array.array('i', [0] * 128)
+    cal_n_clusters = array.array('i', [0])
+    cal_cluster_pad = array.array('f', [0.0] * 128 * 5)
+    cal_cluster_sector = array.array('f', [0.0] * 128 * 5)
+    cal_cluster_layer = array.array('f', [0.0] * 128 * 5)
+    cal_cluster_x = array.array('f', [0.0] * 128 * 5)
+    cal_cluster_y = array.array('f', [0.0] * 128 * 5)
+    cal_cluster_energy = array.array('f', [0.0] * 128 * 5)
+
+    # Create branches in the output tree for these variables
+    output_tree.Branch('tr1_n_hits', tr1_n_hits, 'tr1_n_hits/I')
+    output_tree.Branch('tr1_hit_pad', tr1_hit_pad, 'tr1_hit_pad[tr1_n_hits]/I')
+    output_tree.Branch('tr1_hit_sector', tr1_hit_sector, 'tr1_hit_sector[tr1_n_hits]/I')
+    output_tree.Branch('tr1_hit_layer', tr1_hit_layer, 'tr1_hit_layer[tr1_n_hits]/I')
+    output_tree.Branch('tr1_hit_x', tr1_hit_x, 'tr1_hit_x[tr1_n_hits]/F')
+    output_tree.Branch('tr1_hit_y', tr1_hit_y, 'tr1_hit_y[tr1_n_hits]/F')
+    output_tree.Branch('tr1_hit_energy', tr1_hit_energy, 'tr1_hit_energy[tr1_n_hits]/F')
+    output_tree.Branch('tr1_n_clusters', tr1_n_clusters, 'tr1_n_clusters/I')
+    output_tree.Branch('tr1_cluster_pad', tr1_cluster_pad, 'tr1_cluster_pad[tr1_n_clusters]/F')
+    output_tree.Branch('tr1_cluster_sector', tr1_cluster_sector, 'tr1_cluster_sector[tr1_n_clusters]/F')
+    output_tree.Branch('tr1_cluster_layer', tr1_cluster_layer, 'tr1_cluster_layer[tr1_n_clusters]/F')
+    output_tree.Branch('tr1_cluster_x', tr1_cluster_x, 'tr1_cluster_x[tr1_n_clusters]/F')
+    output_tree.Branch('tr1_cluster_y', tr1_cluster_y, 'tr1_cluster_y[tr1_n_clusters]/F')
+    output_tree.Branch('tr1_cluster_energy', tr1_cluster_energy, 'tr1_cluster_energy[tr1_n_clusters]/F')
+
+    output_tree.Branch('tr2_n_hits', tr2_n_hits, 'tr2_n_hits/I')
+    output_tree.Branch('tr2_hit_pad', tr2_hit_pad, 'tr2_hit_pad[tr2_n_hits]/I')
+    output_tree.Branch('tr2_hit_sector', tr2_hit_sector, 'tr2_hit_sector[tr2_n_hits]/I')
+    output_tree.Branch('tr2_hit_layer', tr2_hit_layer, 'tr2_hit_layer[tr2_n_hits]/I')
+    output_tree.Branch('tr2_hit_x', tr2_hit_x, 'tr2_hit_x[tr2_n_hits]/F')
+    output_tree.Branch('tr2_hit_y', tr2_hit_y, 'tr2_hit_y[tr2_n_hits]/F')
+    output_tree.Branch('tr2_hit_energy', tr2_hit_energy, 'tr2_hit_energy[tr2_n_hits]/F')
+    output_tree.Branch('tr2_n_clusters', tr2_n_clusters, 'tr2_n_clusters/I')
+    output_tree.Branch('tr2_cluster_pad', tr2_cluster_pad, 'tr2_cluster_pad[tr2_n_clusters]/F')
+    output_tree.Branch('tr2_cluster_sector', tr2_cluster_sector, 'tr2_cluster_sector[tr2_n_clusters]/F')
+    output_tree.Branch('tr2_cluster_layer', tr2_cluster_layer, 'tr2_cluster_layer[tr2_n_clusters]/F')
+    output_tree.Branch('tr2_cluster_x', tr2_cluster_x, 'tr2_cluster_x[tr2_n_clusters]/F')
+    output_tree.Branch('tr2_cluster_y', tr2_cluster_y, 'tr2_cluster_y[tr2_n_clusters]/F')
+    output_tree.Branch('tr2_cluster_energy', tr2_cluster_energy, 'tr2_cluster_energy[tr2_n_clusters]/F')
+
+    output_tree.Branch('cal_n_hits', cal_n_hits, 'cal_n_hits/I')
+    output_tree.Branch('cal_hit_pad', cal_hit_pad, 'cal_hit_pad[cal_n_hits]/I')
+    output_tree.Branch('cal_hit_sector', cal_hit_sector, 'cal_hit_sector[cal_n_hits]/I')
+    output_tree.Branch('cal_hit_layer', cal_hit_layer, 'cal_hit_layer[cal_n_hits]/I')
+    output_tree.Branch('cal_hit_x', cal_hit_x, 'cal_hit_x[cal_n_hits]/F')
+    output_tree.Branch('cal_hit_y', cal_hit_y, 'cal_hit_y[cal_n_hits]/F')
+    output_tree.Branch('cal_hit_energy', cal_hit_energy, 'cal_hit_energy[cal_n_hits]/F')
+    output_tree.Branch('cal_n_towers', cal_n_towers, 'cal_n_towers/I')
+    output_tree.Branch('cal_tower_pad', cal_tower_pad, 'cal_tower_pad[cal_n_towers]/I')
+    output_tree.Branch('cal_tower_sector', cal_tower_sector, 'cal_tower_sector[cal_n_towers]/I')
+    output_tree.Branch('cal_tower_energy', cal_tower_energy, 'cal_tower_energy[cal_n_towers]/F')
+    output_tree.Branch('cal_tower_cluster', cal_tower_cluster, 'cal_tower_cluster[cal_n_towers]/I')
+    output_tree.Branch('cal_n_clusters', cal_n_clusters, 'cal_n_clusters/I')
+    output_tree.Branch('cal_cluster_pad', cal_cluster_pad, 'cal_cluster_pad[cal_n_clusters]/F')
+    output_tree.Branch('cal_cluster_sector', cal_cluster_sector, 'cal_cluster_sector[cal_n_clusters]/F')
+    output_tree.Branch('cal_cluster_layer', cal_cluster_layer, 'cal_cluster_layer[cal_n_clusters]/F')
+    output_tree.Branch('cal_cluster_x', cal_cluster_x, 'cal_cluster_x[cal_n_clusters]/F')
+    output_tree.Branch('cal_cluster_y', cal_cluster_y, 'cal_cluster_y[cal_n_clusters]/F')
+    output_tree.Branch('cal_cluster_energy', cal_cluster_energy, 'cal_cluster_energy[cal_n_clusters]/F')
 
     n_events = input_tree.GetEntries()
     for idx, event in enumerate(input_tree):
-        # if idx == 1000:
+        # if idx == 10000:
         #     break
 
         if idx % (1000) == 0:
