@@ -82,7 +82,7 @@ class CalibGraphs:
 
     @classmethod
     def get_calib_graphs(cls):
-        path = "../calibration_files/"
+        path = "../../apv_calibration/"
         for i in range(16):
             calib_file = path + "calibration_apv_{}".format(i) + ".txt"
 
@@ -100,10 +100,20 @@ class CalibGraphs:
                     x_err.append(float(line.split('  ')[3]))
                     y_err.append(float(line.split('  ')[2]))
 
+            # Calibration for trackers APV's are manualy scaled to match MC MPV hit energy
             x = np.array(x)
-            y = np.array(y) * 19.206
+            if i == 0:
+                y = np.array(y) * 19.54364863654917
+            elif i == 1:
+                y = np.array(y) * 18.303542363112417
+            elif i == 2:
+                y = np.array(y) * 21.093676081159632
+            elif i == 3:
+                y = np.array(y) * 20.77784418996082
+            else:
+                y = np.array(y) * 19.206
             x_err = np.array(x_err)
-            y_err = np.array(y_err) * 19.206
+            y_err = np.array(y_err)
 
             cls.calib_graphs.append(TGraphErrors(len(x), x, y, x_err, y_err))
 
@@ -132,7 +142,7 @@ def calib_energy(apv_id, apv_signal):
     return CalibGraphs.calib_graphs[apv_id].Eval(signal)
 
 
-file = TFile.Open("/home/FoxWise/Downloads/run741.root")
+file = TFile.Open("../data/raw/run741.root")
 tree = file.pedestals
 
 output_filie = TFile.Open("noise_histos.root", "RECREATE")
@@ -145,10 +155,6 @@ pad_list = []
 layer_list = []
 noise_list = []
 
-histos = [TH2F("layer_{}".format(i), "Noise_in_LAYER_{}".format(i), 2, 1, 3, 44, 20, 64) for i in range(8)]
-for h in histos:
-    h.GetYaxis().SetTitle("pad")
-    h.GetXaxis().SetTitle("sector")
 for event in tree:
     for i in range(2048):
         sector, pad, layer = position(event.apv_id[i], event.apv_ch[i])
@@ -157,13 +163,7 @@ for event in tree:
         pad_list.append(pad)
         layer_list.append(layer)
         noise_list.append(noise)
-        if (sector == 1 or sector == 2) and pad>20:
-            histos[layer].Fill(sector, pad, event.apv_pedstd[i])
 
-gStyle.SetOptStat(0)
-for idx, h in enumerate(histos):
-    h.Write("noise_layer_{}".format(idx))
-input("wait")
 with open('noise.txt', 'w+') as f:
     f.write("sector  pad  layer noise_in_MeV\n")
     for i in range(2048):
