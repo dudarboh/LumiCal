@@ -75,47 +75,44 @@ class ApvMaps:
                               59, 58, 61, 60, 63, 62, -1]
 
 
-class CalibGraphs:
-    '''APV calibration. To convert Volts to MIPs'''
-    # path on alzt.tau.ac.il server = '/data/alzta/aborysov/tb_2016_data/code/lumical_clust/fcalib/'
-    calib_graphs = []
+'''APV calibration. To convert Volts to MIPs'''
+# path on alzt.tau.ac.il server = '/data/alzta/aborysov/tb_2016_data/code/lumical_clust/fcalib/'
+calib_graphs = []
 
-    @classmethod
-    def get_calib_graphs(cls):
-        path = "../calibration_files/"
-        for i in range(16):
-            calib_file = path + "calibration_apv_{}".format(i) + ".txt"
+path = "../../apv_calibration/"
+for i in range(16):
+    calib_file = path + "calibration_apv_{}".format(i) + ".txt"
 
-            # 1st point
-            x = [0.]
-            y = [0.]
-            x_err = [1.e-5]
-            y_err = [1.e-5]
+    # 1st point
+    x = [0.]
+    y = [0.]
+    x_err = [1.e-5]
+    y_err = [1.e-5]
 
-            # Calibration x-y data is inverted
-            with open(calib_file, 'r') as file:
-                for line in islice(file, 1, None):
-                    x.append(float(line.split('  ')[1]))
-                    y.append(float(line.split('  ')[0]))
-                    x_err.append(float(line.split('  ')[3]))
-                    y_err.append(float(line.split('  ')[2]))
+    # Calibration x-y data is inverted
+    with open(calib_file, 'r') as file:
+        for line in islice(file, 1, None):
+            x.append(float(line.split('  ')[1]))
+            y.append(float(line.split('  ')[0]))
+            x_err.append(float(line.split('  ')[3]))
+            y_err.append(float(line.split('  ')[2]))
 
-            # Calibration for trackers APV's are manualy scaled to match MC MPV hit energy
-            x = np.array(x)
-            if i == 0:
-                y = np.array(y) * 19.54364863654917
-            elif i == 1:
-                y = np.array(y) * 18.303542363112417
-            elif i == 2:
-                y = np.array(y) * 21.093676081159632
-            elif i == 3:
-                y = np.array(y) * 20.77784418996082
-            else:
-                y = np.array(y) * 19.206
-            x_err = np.array(x_err)
-            y_err = np.array(y_err)
+    # Calibration for trackers APV's are manualy scaled to match MC MPV hit energy
+    x = np.array(x)
+    if i == 0:
+        y = np.array(y) * 19.54364863654917
+    elif i == 1:
+        y = np.array(y) * 18.303542363112417
+    elif i == 2:
+        y = np.array(y) * 21.093676081159632
+    elif i == 3:
+        y = np.array(y) * 20.77784418996082
+    else:
+        y = np.array(y) * 19.206
+    x_err = np.array(x_err)
+    y_err = np.array(y_err)
 
-            cls.calib_graphs.append(TGraphErrors(len(x), x, y, x_err, y_err))
+    calib_graphs.append(TGraphErrors(len(x), x, y, x_err, y_err))
 
 
 def position(apv_id, apv_channel):
@@ -139,16 +136,11 @@ def position(apv_id, apv_channel):
 
 def calib_energy(apv_id, apv_signal):
     signal = apv_signal if apv_signal < 1450. else 1450.
-    return CalibGraphs.calib_graphs[apv_id].Eval(signal)
+    return calib_graphs[apv_id].Eval(signal)
 
 
-file = TFile.Open("../data/raw/run741.root")
+file = TFile.Open("../data/pedestal/run741.root")
 tree = file.pedestals
-
-output_filie = TFile.Open("noise_histos.root", "RECREATE")
-output_filie.cd()
-
-CalibGraphs.get_calib_graphs()
 
 sector_list = []
 pad_list = []

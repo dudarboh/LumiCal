@@ -25,7 +25,7 @@
 # # 8 layers: 0, 1 - trackers; 2, 3, 4, 5, 6, 7 - calorimeter; 7 - tab (bad)
 
 
-from ROOT import TFile, TTree, TChain, TGraphErrors, gROOT
+from ROOT import TFile, TTree, TGraphErrors
 import array
 import time
 import numpy as np
@@ -143,43 +143,42 @@ output_tree.Branch('cal_cluster_energy', cal_cluster_energy, 'cal_cluster_energy
 calib_graphs = []
 
 
-def get_calib_graphs(cls):
-    """Define calibration graphs for APVs"""
-    # path on alzt.tau.ac.il server = '/data/alzta/aborysov/tb_2016_data/code/lumical_clust/fcalib/'
-    path = "../apv_calibration/"
-    for i in range(16):
-        calib_file = path + "calibration_apv_{}".format(i) + ".txt"
+"""Define calibration graphs for APVs"""
+# path on alzt.tau.ac.il server = '/data/alzta/aborysov/tb_2016_data/code/lumical_clust/fcalib/'
+path = "../../apv_calibration/"
+for i in range(16):
+    calib_file = path + "calibration_apv_{}".format(i) + ".txt"
 
-        # 1st point
-        x = [0.]
-        y = [0.]
-        x_err = [1.e-5]
-        y_err = [1.e-5]
+    # 1st point
+    x = [0.]
+    y = [0.]
+    x_err = [1.e-5]
+    y_err = [1.e-5]
 
-        # Calibration x-y data is inverted
-        with open(calib_file, 'r') as file:
-            for line in islice(file, 1, None):
-                x.append(float(line.split('  ')[1]))
-                y.append(float(line.split('  ')[0]))
-                x_err.append(float(line.split('  ')[3]))
-                y_err.append(float(line.split('  ')[2]))
+    # Calibration x-y data is inverted
+    with open(calib_file, 'r') as file:
+        for line in islice(file, 1, None):
+            x.append(float(line.split('  ')[1]))
+            y.append(float(line.split('  ')[0]))
+            x_err.append(float(line.split('  ')[3]))
+            y_err.append(float(line.split('  ')[2]))
 
-        x = np.array(x)
-        # Calibration for tracker APVs are manualy scaled to match MC MPV hit energy
-        if i == 0:
-            y = np.array(y) * 19.54364863654917
-        elif i == 1:
-            y = np.array(y) * 18.303542363112417
-        elif i == 2:
-            y = np.array(y) * 21.093676081159632
-        elif i == 3:
-            y = np.array(y) * 20.77784418996082
-        else:
-            y = np.array(y) * 19.206
-        x_err = np.array(x_err)
-        y_err = np.array(y_err)
+    x = np.array(x)
+    # Calibration for tracker APVs are manualy scaled to match MC MPV hit energy
+    if i == 0:
+        y = np.array(y) * 19.54364863654917
+    elif i == 1:
+        y = np.array(y) * 18.303542363112417
+    elif i == 2:
+        y = np.array(y) * 21.093676081159632
+    elif i == 3:
+        y = np.array(y) * 20.77784418996082
+    else:
+        y = np.array(y) * 19.206
+    x_err = np.array(x_err)
+    y_err = np.array(y_err)
 
-        calib_graphs.append(TGraphErrors(len(x), x, y, x_err, y_err))
+    calib_graphs.append(TGraphErrors(len(x), x, y, x_err, y_err))
 
 
 def bad_pad(sector, pad, layer):
@@ -418,8 +417,7 @@ def set_tower_clusters(towers_list):
 
 def merge_clusters(clusters_list):
     """Merge pair of clusters if they meet following condition"""
-    restart = True
-    while restart:
+    while True:
         for clst1, clst2 in zip(clusters_list, clusters_list):
             if clst1 == clst2:
                 continue
@@ -430,7 +428,7 @@ def merge_clusters(clusters_list):
                 clusters_list.remove(clst2)
                 break
         else:
-            restart = False
+            break
 
 
 def make_hits_lists(event):
@@ -522,7 +520,7 @@ def main(root_file):
     input_tree = input_file.apv_reco
 
     # Create output root file
-    output_file = TFile('../extracted_root_files/extracted_data_RENAME.root', "RECREATE")
+    output_file = TFile('../extracted/extracted_data_RENAME.root', "RECREATE")
 
     n_events = input_tree.GetEntries()
     for idx, event in enumerate(input_tree):
@@ -561,65 +559,62 @@ def main(root_file):
             clusters_tr1.sort(key=lambda x: abs(x.y - clusters_cal[0].y))
             clusters_tr2.sort(key=lambda x: abs(x.y - clusters_cal[0].y))
 
-        output_tree.tr1_n_hits[0] = len(hits_tr1)
+        tr1_n_hits[0] = len(hits_tr1)
         for i, hit in enumerate(hits_tr1):
-            output_tree.tr1_hit_pad[i] = hit.pad
-            output_tree.tr1_hit_sector[i] = hit.sector
-            output_tree.tr1_hit_layer[i] = hit.layer
-            output_tree.tr1_hit_x[i] = hit.x
-            output_tree.tr1_hit_y[i] = hit.y
-            output_tree.tr1_hit_energy[i] = hit.energy
-        output_tree.tr1_n_clusters[0] = len(clusters_tr1)
+            tr1_hit_pad[i] = hit.pad
+            tr1_hit_sector[i] = hit.sector
+            tr1_hit_layer[i] = hit.layer
+            tr1_hit_x[i] = hit.x
+            tr1_hit_y[i] = hit.y
+            tr1_hit_energy[i] = hit.energy
+        tr1_n_clusters[0] = len(clusters_tr1)
         for i, cluster in enumerate(clusters_tr1):
-            output_tree.tr1_cluster_pad[i] = cluster.pad
-            output_tree.tr1_cluster_sector[i] = cluster.sector
-            output_tree.tr1_cluster_layer[i] = cluster.layer
-            output_tree.tr1_cluster_x[i] = cluster.x
-            output_tree.tr1_cluster_y[i] = cluster.y
-            output_tree.tr1_cluster_energy[i] = cluster.energy
-            output_tree.tr1_cluster_n_pads[i] = cluster.n_pads
+            tr1_cluster_pad[i] = cluster.pad
+            tr1_cluster_sector[i] = cluster.sector
+            tr1_cluster_layer[i] = cluster.layer
+            tr1_cluster_x[i] = cluster.x
+            tr1_cluster_y[i] = cluster.y
+            tr1_cluster_energy[i] = cluster.energy
 
-        output_tree.tr2_n_hits[0] = len(hits_tr2)
+        tr2_n_hits[0] = len(hits_tr2)
         for i, hit in enumerate(hits_tr2):
-            output_tree.tr2_hit_pad[i] = hit.pad
-            output_tree.tr2_hit_sector[i] = hit.sector
-            output_tree.tr2_hit_layer[i] = hit.layer
-            output_tree.tr2_hit_x[i] = hit.x
-            output_tree.tr2_hit_y[i] = hit.y
-            output_tree.tr2_hit_energy[i] = hit.energy
-        output_tree.tr2_n_clusters[0] = len(clusters_tr2)
+            tr2_hit_pad[i] = hit.pad
+            tr2_hit_sector[i] = hit.sector
+            tr2_hit_layer[i] = hit.layer
+            tr2_hit_x[i] = hit.x
+            tr2_hit_y[i] = hit.y
+            tr2_hit_energy[i] = hit.energy
+        tr2_n_clusters[0] = len(clusters_tr2)
         for i, cluster in enumerate(clusters_tr2):
-            output_tree.tr2_cluster_pad[i] = cluster.pad
-            output_tree.tr2_cluster_sector[i] = cluster.sector
-            output_tree.tr2_cluster_layer[i] = cluster.layer
-            output_tree.tr2_cluster_x[i] = cluster.x
-            output_tree.tr2_cluster_y[i] = cluster.y
-            output_tree.tr2_cluster_energy[i] = cluster.energy
-            output_tree.tr2_cluster_n_pads[i] = cluster.n_pads
+            tr2_cluster_pad[i] = cluster.pad
+            tr2_cluster_sector[i] = cluster.sector
+            tr2_cluster_layer[i] = cluster.layer
+            tr2_cluster_x[i] = cluster.x
+            tr2_cluster_y[i] = cluster.y
+            tr2_cluster_energy[i] = cluster.energy
 
-        output_tree.cal_n_hits[0] = len(hits_cal)
+        cal_n_hits[0] = len(hits_cal)
         for i, hit in enumerate(hits_cal):
-            output_tree.cal_hit_pad[i] = hit.pad
-            output_tree.cal_hit_sector[i] = hit.sector
-            output_tree.cal_hit_layer[i] = hit.layer
-            output_tree.cal_hit_x[i] = hit.x
-            output_tree.cal_hit_y[i] = hit.y
-            output_tree.cal_hit_energy[i] = hit.energy
-        output_tree.cal_n_towers[0] = len(towers_cal)
+            cal_hit_pad[i] = hit.pad
+            cal_hit_sector[i] = hit.sector
+            cal_hit_layer[i] = hit.layer
+            cal_hit_x[i] = hit.x
+            cal_hit_y[i] = hit.y
+            cal_hit_energy[i] = hit.energy
+        cal_n_towers[0] = len(towers_cal)
         for i, tower in enumerate(towers_cal):
-            output_tree.cal_tower_pad[i] = tower.pad
-            output_tree.cal_tower_sector[i] = tower.sector
-            output_tree.cal_tower_energy[i] = tower.energy
-            output_tree.cal_tower_cluster[i] = tower.cluster
-        output_tree.cal_n_clusters[0] = len(clusters_cal)
+            cal_tower_pad[i] = tower.pad
+            cal_tower_sector[i] = tower.sector
+            cal_tower_energy[i] = tower.energy
+            cal_tower_cluster[i] = tower.cluster
+        cal_n_clusters[0] = len(clusters_cal)
         for i, cluster in enumerate(clusters_cal):
-            output_tree.cal_cluster_pad[i] = cluster.pad
-            output_tree.cal_cluster_sector[i] = cluster.sector
-            output_tree.cal_cluster_layer[i] = cluster.layer
-            output_tree.cal_cluster_x[i] = cluster.x
-            output_tree.cal_cluster_y[i] = cluster.y
-            output_tree.cal_cluster_energy[i] = cluster.energy
-            output_tree.cal_cluster_n_pads[i] = cluster.n_pads
+            cal_cluster_pad[i] = cluster.pad
+            cal_cluster_sector[i] = cluster.sector
+            cal_cluster_layer[i] = cluster.layer
+            cal_cluster_x[i] = cluster.x
+            cal_cluster_y[i] = cluster.y
+            cal_cluster_energy[i] = cluster.energy
 
         output_tree.Fill()
 
@@ -631,11 +626,7 @@ def main(root_file):
 
 pr = cProfile.Profile()
 pr.enable()
-# main("../data/run737_741_5gev.root")
-# main("../data/run742_744_4gev.root")
-# main("../data/run745_746_3gev.root")
-# main("../data/run747_748_2gev.root")
-main("../data/run749_750_1gev.root")
+main("../data/runs_767_786.root")
 pr.disable()
 
 ps = pstats.Stats(pr).sort_stats(pstats.SortKey.CUMULATIVE)
