@@ -8,11 +8,11 @@ gROOT.SetStyle('ATLAS')
 gROOT.SetBatch(0)
 
 # Data trees
-f_data_5gev = TFile.Open("../extracted_root_files/extracted_data_5gev.root", 'read')
-f_data_4gev = TFile.Open('../extracted_root_files/extracted_data_4gev.root', 'read')
-f_data_3gev = TFile.Open('../extracted_root_files/extracted_data_3gev.root', 'read')
-f_data_2gev = TFile.Open('../extracted_root_files/extracted_data_2gev.root', 'read')
-f_data_1gev = TFile.Open('../extracted_root_files/extracted_data_1gev.root', 'read')
+f_data_5gev = TFile.Open("../extracted/extracted_data_5gev.root", 'read')
+f_data_4gev = TFile.Open('../extracted/extracted_data_4gev.root', 'read')
+f_data_3gev = TFile.Open('../extracted/extracted_data_3gev.root', 'read')
+f_data_2gev = TFile.Open('../extracted/extracted_data_2gev.root', 'read')
+f_data_1gev = TFile.Open('../extracted/extracted_data_1gev.root', 'read')
 t_data_5gev = f_data_5gev.data
 t_data_4gev = f_data_4gev.data
 t_data_3gev = f_data_3gev.data
@@ -20,19 +20,16 @@ t_data_2gev = f_data_2gev.data
 t_data_1gev = f_data_1gev.data
 
 # MC trees
-f_mc_5gev = TFile.Open("../extracted_root_files/extracted_lucas_5gev.root", 'read')
-f_mc_4gev = TFile.Open("../extracted_root_files/extracted_lucas_4gev.root", 'read')
-f_mc_3gev = TFile.Open("../extracted_root_files/extracted_lucas_3gev.root", 'read')
-f_mc_2gev = TFile.Open("../extracted_root_files/extracted_lucas_2gev.root", 'read')
-f_mc_1gev = TFile.Open("../extracted_root_files/extracted_lucas_1gev.root", 'read')
+f_mc_5gev = TFile.Open("../extracted/extracted_lucas_5gev.root", 'read')
+f_mc_4gev = TFile.Open("../extracted/extracted_lucas_4gev.root", 'read')
+f_mc_3gev = TFile.Open("../extracted/extracted_lucas_3gev.root", 'read')
+f_mc_2gev = TFile.Open("../extracted/extracted_lucas_2gev.root", 'read')
+f_mc_1gev = TFile.Open("../extracted/extracted_lucas_1gev.root", 'read')
 t_mc_5gev = f_mc_5gev.mc
 t_mc_4gev = f_mc_4gev.mc
 t_mc_3gev = f_mc_3gev.mc
 t_mc_2gev = f_mc_2gev.mc
 t_mc_1gev = f_mc_1gev.mc
-
-output_file = TFile.Open("./results.root", "RECREATE")
-output_file.cd()
 
 
 def func():
@@ -237,5 +234,15 @@ def ratioplot():
     input('i am finished')
 
 
-# func()
-bs_numbers()
+def splitting():
+    gStyle.SetMarkerStyle(1)
+    h5 = TH2F("h5", "title", 30, 45, 48, 20, 0, 1)
+
+    t_data_5gev.Draw("tr2_hit_energy[1]/(tr2_hit_energy[0]+tr2_hit_energy[1]):cal_cluster_pad[0]>>h5",
+                     "tr2_n_clusters == 1 && tr2_cluster_n_pads == 2 && (tr2_hit_sector[0] == tr2_hit_sector[1])",
+                     "colz")
+
+    input("wait")
+
+
+splitting()

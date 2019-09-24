@@ -40,13 +40,12 @@ def align_detector(hits_tr1, hits_tr2, hits_cal):
 
 
 class Hit:
-    def __init__(self, sector, pad, layer, n_bs_particles, n_dir_particles, energy_in_mip):
+    def __init__(self, sector, pad, layer, is_primary, energy_in_mip):
         self.sector = sector
         self.pad = pad
         self.layer = layer
         self.energy = energy_in_mip
-        self.n_bs_particles = n_bs_particles
-        self.n_dir_particles = n_dir_particles
+        self.is_prime = is_primary
         rho = 80. + 0.9 + 1.8 * self.pad
         phi = np.pi / 2 + np.pi / 12 - np.pi / 48 - np.pi / 24 * self.sector
         self.x = rho * np.cos(phi)
@@ -171,12 +170,11 @@ def make_hits_lists(event):
     hits_tracker2 = []
     hits_calorimeter = []
 
-    for sector, pad, layer, energy, n_bs, n_dir in zip(event.hit_sector,
-                                                       event.hit_pad,
-                                                       event.hit_layer,
-                                                       event.hit_energy,
-                                                       event.n_bs_particles,
-                                                       event.n_dir_particles):
+    for sector, pad, layer, energy, prim in zip(event.hit_sector,
+                                                event.hit_pad,
+                                                event.hit_layer,
+                                                event.hit_energy,
+                                                event.is_primary):
 
         # Selection as in data
         if ((layer > 1 and energy < 1.4)
@@ -188,7 +186,7 @@ def make_hits_lists(event):
             continue
 
         # If passed the selection create hit and add to corresponding list
-        hit = Hit(sector, pad, layer, n_bs, n_dir, energy)
+        hit = Hit(sector, pad, layer, prim, energy)
 
         if layer == 0:
             hits_tracker1.append(hit)
@@ -251,8 +249,7 @@ def main(filename):
     tr1_hit_layer = array.array('i', [0] * 128)
     tr1_hit_x = array.array('f', [0.0] * 128)
     tr1_hit_y = array.array('f', [0.0] * 128)
-    tr1_hit_n_bs_particles = array.array('i', [0] * 128)
-    tr1_hit_n_dir_particles = array.array('i', [0] * 128)
+    tr1_hit_is_prime = array.array('i', [0] * 128)
     tr1_hit_energy = array.array('f', [0.0] * 128)
     tr1_n_clusters = array.array('i', [0])
     tr1_cluster_pad = array.array('f', [0.0] * 128)
@@ -268,8 +265,7 @@ def main(filename):
     tr2_hit_layer = array.array('i', [0] * 128)
     tr2_hit_x = array.array('f', [0.0] * 128)
     tr2_hit_y = array.array('f', [0.0] * 128)
-    tr2_hit_n_bs_particles = array.array('i', [0] * 128)
-    tr2_hit_n_dir_particles = array.array('i', [0] * 128)
+    tr2_hit_is_prime = array.array('i', [0] * 128)
     tr2_hit_energy = array.array('f', [0.0] * 128)
     tr2_n_clusters = array.array('i', [0])
     tr2_cluster_pad = array.array('f', [0.0] * 128)
@@ -285,8 +281,7 @@ def main(filename):
     cal_hit_layer = array.array('i', [0] * 128 * 5)
     cal_hit_x = array.array('f', [0.0] * 128 * 5)
     cal_hit_y = array.array('f', [0.0] * 128 * 5)
-    cal_hit_n_bs_particles = array.array('i', [0] * 128)
-    cal_hit_n_dir_particles = array.array('i', [0] * 128)
+    cal_hit_is_prime = array.array('i', [0] * 128)
     cal_hit_energy = array.array('f', [0.0] * 128 * 5)
     cal_n_towers = array.array('i', [0])
     cal_tower_pad = array.array('i', [0] * 128)
@@ -307,8 +302,7 @@ def main(filename):
     output_tree.Branch('tr1_hit_layer', tr1_hit_layer, 'tr1_hit_layer[tr1_n_hits]/I')
     output_tree.Branch('tr1_hit_x', tr1_hit_x, 'tr1_hit_x[tr1_n_hits]/F')
     output_tree.Branch('tr1_hit_y', tr1_hit_y, 'tr1_hit_y[tr1_n_hits]/F')
-    output_tree.Branch('tr1_hit_n_bs_particles', tr1_hit_n_bs_particles, 'tr1_hit_n_bs_particles[tr1_n_hits]/I')
-    output_tree.Branch('tr1_hit_n_dir_particles', tr1_hit_n_dir_particles, 'tr1_hit_n_dir_particles[tr1_n_hits]/I')
+    output_tree.Branch('tr1_hit_is_prime', tr1_hit_is_prime, 'tr1_hit_is_prime[tr1_n_hits]/I')
     output_tree.Branch('tr1_hit_energy', tr1_hit_energy, 'tr1_hit_energy[tr1_n_hits]/F')
     output_tree.Branch('tr1_n_clusters', tr1_n_clusters, 'tr1_n_clusters/I')
     output_tree.Branch('tr1_cluster_pad', tr1_cluster_pad, 'tr1_cluster_pad[tr1_n_clusters]/F')
@@ -324,8 +318,7 @@ def main(filename):
     output_tree.Branch('tr2_hit_layer', tr2_hit_layer, 'tr2_hit_layer[tr2_n_hits]/I')
     output_tree.Branch('tr2_hit_x', tr2_hit_x, 'tr2_hit_x[tr2_n_hits]/F')
     output_tree.Branch('tr2_hit_y', tr2_hit_y, 'tr2_hit_y[tr2_n_hits]/F')
-    output_tree.Branch('tr2_hit_n_bs_particles', tr2_hit_n_bs_particles, 'tr2_hit_n_bs_particles[tr2_n_hits]/I')
-    output_tree.Branch('tr2_hit_n_dir_particles', tr2_hit_n_dir_particles, 'tr2_hit_n_dir_particles[tr2_n_hits]/I')
+    output_tree.Branch('tr2_hit_is_prime', tr2_hit_is_prime, 'tr2_hit_is_prime[tr2_n_hits]/I')
     output_tree.Branch('tr2_hit_energy', tr2_hit_energy, 'tr2_hit_energy[tr2_n_hits]/F')
     output_tree.Branch('tr2_n_clusters', tr2_n_clusters, 'tr2_n_clusters/I')
     output_tree.Branch('tr2_cluster_pad', tr2_cluster_pad, 'tr2_cluster_pad[tr2_n_clusters]/F')
@@ -341,8 +334,7 @@ def main(filename):
     output_tree.Branch('cal_hit_layer', cal_hit_layer, 'cal_hit_layer[cal_n_hits]/I')
     output_tree.Branch('cal_hit_x', cal_hit_x, 'cal_hit_x[cal_n_hits]/F')
     output_tree.Branch('cal_hit_y', cal_hit_y, 'cal_hit_y[cal_n_hits]/F')
-    output_tree.Branch('cal_hit_n_bs_particles', cal_hit_n_bs_particles, 'cal_hit_n_bs_particles[cal_n_hits]/I')
-    output_tree.Branch('cal_hit_n_dir_particles', cal_hit_n_dir_particles, 'cal_hit_n_dir_particles[cal_n_hits]/I')
+    output_tree.Branch('cal_hit_is_prime', cal_hit_is_prime, 'cal_hit_is_prime[cal_n_hits]/I')
     output_tree.Branch('cal_hit_energy', cal_hit_energy, 'cal_hit_energy[cal_n_hits]/F')
     output_tree.Branch('cal_n_towers', cal_n_towers, 'cal_n_towers/I')
     output_tree.Branch('cal_tower_pad', cal_tower_pad, 'cal_tower_pad[cal_n_towers]/I')
@@ -401,8 +393,7 @@ def main(filename):
             tr1_hit_layer[i] = hit.layer
             tr1_hit_x[i] = hit.x
             tr1_hit_y[i] = hit.y
-            tr1_hit_n_bs_particles[i] = hit.n_bs_particles
-            tr1_hit_n_dir_particles[i] = hit.n_dir_particles
+            tr1_hit_is_prime[i] = hit.is_prime
             tr1_hit_energy[i] = hit.energy
         tr1_n_clusters[0] = len(clusters_tr1)
         for i, cluster in enumerate(clusters_tr1):
@@ -420,8 +411,7 @@ def main(filename):
             tr2_hit_layer[i] = hit.layer
             tr2_hit_x[i] = hit.x
             tr2_hit_y[i] = hit.y
-            tr2_hit_n_bs_particles[i] = hit.n_bs_particles
-            tr2_hit_n_dir_particles[i] = hit.n_dir_particles
+            tr2_hit_is_prime[i] = hit.is_prime
             tr2_hit_energy[i] = hit.energy
         tr2_n_clusters[0] = len(clusters_tr2)
         for i, cluster in enumerate(clusters_tr2):
@@ -439,8 +429,7 @@ def main(filename):
             cal_hit_layer[i] = hit.layer
             cal_hit_x[i] = hit.x
             cal_hit_y[i] = hit.y
-            cal_hit_n_bs_particles[i] = hit.n_bs_particles
-            cal_hit_n_dir_particles[i] = hit.n_dir_particles
+            cal_hit_is_prime[i] = hit.is_prime
             cal_hit_energy[i] = hit.energy
         cal_n_towers[0] = len(towers_cal)
         for i, tower in enumerate(towers_cal):
@@ -468,10 +457,10 @@ def main(filename):
 pr = cProfile.Profile()
 pr.enable()
 main('lucas_5gev.root')
-main('lucas_4gev.root')
-main('lucas_3gev.root')
-main('lucas_2gev.root')
-main('lucas_1gev.root')
+# main('lucas_4gev.root')
+# main('lucas_3gev.root')
+# main('lucas_2gev.root')
+# main('lucas_1gev.root')
 
 pr.disable()
 
