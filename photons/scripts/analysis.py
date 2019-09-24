@@ -4,76 +4,62 @@ import numpy as np
 gROOT.SetBatch(0)
 gROOT.SetStyle('ATLAS')
 
-# file_data = TFile.Open("../extracted_root_files/extracted_data_photons_5gev.root", 'read')
-file_data = TFile.Open("../extracted_root_files/extracted_data_5gev.root", 'read')
-# file_data = TFile.Open("../extracted_root_files/extracted_data_photons_eveto_5gev.root", 'read')
+# file_data = TFile.Open("../extracted/extracted_data_5gev.root", 'read')
+file_data = TFile.Open("../extracted/extracted_data_5gev_merged.root", 'read')
 tree_data = file_data.data
-
-output_file = TFile.Open("./results_photons.root", "RECREATE")
-output_file.cd()
 
 
 def plot():
-    gStyle.SetPalette(1)
-    tree_data.Draw("tr1_cluster_energy>>h(200,0,10)", "", "histo")
-    tree_data.Draw("tr1_hit_energy>>h1(200,0,10)", "", "histosame")
+    h1 = TH1F('h1', 'Clst1', 8, 0, 8)
+    h2 = TH1F('h2', 'Clst2', 8, 0, 8)
+    # for event in tree_data:
+    tree_data.Draw("tr1_n_hits>>h1", "", "histo")
+    h1.SetLineColor(1)
 
-    h = gROOT.FindObject("h")
-    h.DrawNormalized()
+    tree_data.Draw("tr2_n_hits>>h2", "", "histosame")
+    h2.SetLineColor(2)
 
-    h1 = gROOT.FindObject("h1")
-    h1.DrawNormalized("same")
     input("wait")
 
 
-def main():
-    histo = TH2F('histo', 'histo', 4, 0, 4, 64, 0, 64)
-    histo.SetContour(50)
+def identification():
+    x = np.arange(0, 10, 0.1)
+    y1 = []
+    y2 = []
 
-    canvas = TCanvas('name', 'title', 1024, 768)
-    canvas.cd()
-    counter = 0
-    for i, event in enumerate(tree_data):
-        if counter == 20:
-            break
-        energy_in_cal = sum([en for en in event.cal_hit_energy])
-        if energy_in_cal < 150:
-            continue
-        print(energy_in_cal)
+    tree_data.Draw(">>n_events1", "cal_n_clusters>0")
+    n_events1 = gROOT.FindObject("n_events1")
+    n_ev1 = n_events1.GetN()
 
-        tree_data.Draw("cal_hit_pad:cal_hit_sector>>histo", "cal_hit_energy*(Entry$ == {})".format(i), "colz")
-        canvas.Update()
-        palette = histo.GetListOfFunctions().FindObject("palette")
-        palette.SetX1NDC(0.88)
-        palette.SetX2NDC(0.93)
-        palette.SetY1NDC(0.2)
-        palette.SetY2NDC(0.9)
-
-        histo.SetMinimum(0.)
-        histo.SetMaximum(200.)
-
-        canvas.Print("./events_pics/{}".format(i) + '.png')
-        counter += 1
-
-    # h1 = TH1F('h1', 'h1', 64, 80., 195.2)
-    # h2 = TH1F('h2', 'h2', 64, 80., 195.2)
-    # h3 = TH1F('h3', 'h3', 64, 80., 195.2)
-    # h4 = TH1F('h4', 'h4', 64, 80., 195.2)
-    # # for event in tree_data:
-    # tree_data.Draw("cal_cluster_y[0]>>h1", "cal_n_hits>0", "histo")
-    # h1.SetLineColor(1)
-
-    # tree_data.Draw("cal_cluster_y[1]>>h2", "cal_n_hits>0", "histosame")
-    # h2.SetLineColor(2)
-
-    # tree_data.Draw("cal_cluster_y[2]>>h3", "cal_n_hits>0", "histosame")
-    # h3.SetLineColor(3)
-
-    # tree_data.Draw("cal_cluster_y[3]>>h4", "cal_n_hits>0", "histosame")
-    # h4.SetLineColor(4)
-
-    # input("wait")
+    tree_data.Draw(">>n_events2", "cal_n_clusters>1")
+    n_events2 = gROOT.FindObject("n_events2")
+    n_ev2 = n_events2.GetN()
 
 
-# main()
-plot()
+    for acc in x:
+        print("Obtaining {} point".format(acc))
+        tree_data.Draw(">>list1", "(Sum$(abs(cal_cluster_y[0]-tr1_hit_y)<{0}) > 0) && (Sum$(abs(cal_cluster_y[0]-tr2_hit_y)<{0}) > 0)".format(acc))
+        # tree_data.Draw(">>list2", "Sum$(abs(cal_cluster_y[0]-tr2_hit_y)<{}) > 0".format(acc))
+
+        l1 = gROOT.FindObject("list1")
+        # l2 = gROOT.FindObject("list2")
+
+        y1.append(l1.GetN() / n_ev1 * 100.)
+        # y2.append(l2.GetN() / n_ev1 * 100.)
+
+    gr1 = TGraphErrors(len(x), x, np.array(y1), nullptr, nullptr)
+    gr1.Draw("APL")
+    gr1.SetTitle("Hits in both trackers")
+    gr1.GetXaxis().SetTitle("Accepted track distance, mm")
+    gr1.GetYaxis().SetTitle("Accepted events, %")
+
+    # gr2 = TGraphErrors(len(x), x, np.array(y2), nullptr, nullptr)
+    # gr2.Draw("PLsame")
+    # gr2.SetTitle("Tracker 2 hits")
+    # gr2.SetMarkerColor(2)
+    # gr2.SetLineColor(2)
+
+    input("wait")
+
+# plot()
+identification()
