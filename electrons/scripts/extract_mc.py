@@ -174,7 +174,7 @@ def make_hits_lists(event):
                                                 event.hit_pad,
                                                 event.hit_layer,
                                                 event.hit_energy,
-                                                event.is_primary):
+                                                event.hit_primary):
 
         # Selection as in data
         if ((layer > 1 and energy < 1.4)

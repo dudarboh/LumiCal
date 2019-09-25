@@ -1,4 +1,4 @@
-from ROOT import TFile, gROOT, TGraphErrors, TGraph, TF1, gStyle, TF1, nullptr, TH2F
+from ROOT import TFile, gROOT, TGraphErrors, TGraph, TF1, gStyle, TF1, nullptr, TH2F, TMath
 from ROOT import TCanvas, TColor, TGaxis, TH1F, TPad
 from ROOT import kBlack, kBlue, kRed
 
@@ -21,134 +21,50 @@ t_data_1gev = f_data_1gev.data
 
 # MC trees
 f_mc_5gev = TFile.Open("../extracted/extracted_lucas_5gev.root", 'read')
-f_mc_4gev = TFile.Open("../extracted/extracted_lucas_4gev.root", 'read')
-f_mc_3gev = TFile.Open("../extracted/extracted_lucas_3gev.root", 'read')
-f_mc_2gev = TFile.Open("../extracted/extracted_lucas_2gev.root", 'read')
-f_mc_1gev = TFile.Open("../extracted/extracted_lucas_1gev.root", 'read')
+# f_mc_4gev = TFile.Open("../extracted/extracted_lucas_4gev.root", 'read')
+# f_mc_3gev = TFile.Open("../extracted/extracted_lucas_3gev.root", 'read')
+# f_mc_2gev = TFile.Open("../extracted/extracted_lucas_2gev.root", 'read')
+# f_mc_1gev = TFile.Open("../extracted/extracted_lucas_1gev.root", 'read')
 t_mc_5gev = f_mc_5gev.mc
-t_mc_4gev = f_mc_4gev.mc
-t_mc_3gev = f_mc_3gev.mc
-t_mc_2gev = f_mc_2gev.mc
-t_mc_1gev = f_mc_1gev.mc
+# t_mc_4gev = f_mc_4gev.mc
+# t_mc_3gev = f_mc_3gev.mc
+# t_mc_2gev = f_mc_2gev.mc
+# t_mc_1gev = f_mc_1gev.mc
 
 
-def func():
-    gStyle.SetMarkerStyle(1)
+def langaufun(x, par):
+    invsq2pi = 0.3989422804014  # (2 pi)^(-1 / 2)
+    mpshift = -0.22278298  # Landau maximum location
 
-    canvas = TCanvas("name", "title", 1024, 768)
-    canvas.cd()
-    x = [1., 2., 3., 4., 5.]
-    y_data = []
-    y_mc = []
-    y_err = []
+    np = 100  # number of convolution steps
+    sc = 5.  # convolution extends to +-sc Gaussian sigmas
 
-    t_mc_1gev.Draw("Sum$(tr2_hit_n_bs_particles)>>h1", "Sum$(tr2_hit_n_bs_particles > 0 && tr2_hit_n_dir_particles == 0) > 0")
-    h1 = gROOT.FindObject("h1")
-    y_mc.append(h1.GetMean())
-    y_err.append(np.sqrt(h1.GetMean()/h1.GetEntries()))
+    summ = 0
 
-    t_mc_2gev.Draw("Sum$(tr2_hit_n_bs_particles)>>h2", "Sum$(tr2_hit_n_bs_particles > 0 && tr2_hit_n_dir_particles == 0) > 0")
-    h2 = gROOT.FindObject("h2")
-    y_mc.append(h2.GetMean())
-    y_err.append(np.sqrt(h2.GetMean()/h2.GetEntries()))
+    mpc = par[1] - mpshift * par[0]
 
-    t_mc_3gev.Draw("Sum$(tr2_hit_n_bs_particles)>>h3", "Sum$(tr2_hit_n_bs_particles > 0 && tr2_hit_n_dir_particles == 0) > 0")
-    h3 = gROOT.FindObject("h3")
-    y_mc.append(h3.GetMean())
-    y_err.append(np.sqrt(h3.GetMean()/h3.GetEntries()))
+    xlow = x[0] - sc * par[3]
+    xupp = x[0] + sc * par[3]
 
-    t_mc_4gev.Draw("Sum$(tr2_hit_n_bs_particles)>>h4", "Sum$(tr2_hit_n_bs_particles > 0 && tr2_hit_n_dir_particles == 0) > 0")
-    h4 = gROOT.FindObject("h4")
-    y_mc.append(h4.GetMean())
-    y_err.append(np.sqrt(h4.GetMean()/h4.GetEntries()))
+    step = (xupp - xlow) / np
 
-    t_mc_5gev.Draw("Sum$(tr2_hit_n_bs_particles)>>h5", "Sum$(tr2_hit_n_bs_particles > 0 && tr2_hit_n_dir_particles == 0) > 0")
-    h5 = gROOT.FindObject("h5")
-    y_mc.append(h5.GetMean())
-    y_err.append(np.sqrt(h5.GetMean()/h5.GetEntries()))
+    if par[0] == 0:
+        par[0] = 1e-6
+    if par[3] == 0:
+        par[3] = 1e-6
+    for i in range(np // 2):
+        xx = xlow + (i + 0.5) * step
+        fland = TMath.Landau(xx, mpc, par[0]) / par[0]
+        summ += fland * TMath.Gaus(x[0], xx, par[3])
 
-    gr_mc = TGraphErrors(5, np.array(x), np.array(y_mc), nullptr, np.array(y_err))
-    gr_mc.SetTitle("MC")
-    gr_mc.SetMarkerStyle(20)
-    gr_mc.SetLineColor(2)
-    gr_mc.Draw("APE")
+        xx = xupp - (i + 0.5) * step
+        fland = TMath.Landau(xx, mpc, par[0]) / par[0]
+        summ += fland * TMath.Gaus(x[0], xx, par[3])
+
+    return par[2] * step * summ * invsq2pi / par[3]
 
 
-    canvas.BuildLegend()
-
-    input('wait')
-
-
-def bs_numbers():
-    gStyle.SetMarkerStyle(1)
-
-    canvas = TCanvas("name", "title", 1024, 768)
-    canvas.cd()
-    x = [1., 2., 3., 4., 5.]
-    y_mc_bs = []
-    y_mc_dir = []
-
-    t_mc_1gev.Draw(">>h1_mc", "Sum$(tr2_hit_n_bs_particles>0) > 0")
-    h1_mc = gROOT.FindObject("h1_mc")
-    y_mc_bs.append(h1_mc.GetN() / t_mc_1gev.GetEntries() * 100)
-
-    t_mc_2gev.Draw(">>h2_mc", "Sum$(tr2_hit_n_bs_particles>0) > 0")
-    h2_mc = gROOT.FindObject("h2_mc")
-    y_mc_bs.append(h2_mc.GetN() / t_mc_2gev.GetEntries() * 100)
-
-    t_mc_3gev.Draw(">>h3_mc", "Sum$(tr2_hit_n_bs_particles>0) > 0")
-    h3_mc = gROOT.FindObject("h3_mc")
-    y_mc_bs.append(h3_mc.GetN() / t_mc_3gev.GetEntries() * 100)
-
-    t_mc_4gev.Draw(">>h4_mc", "Sum$(tr2_hit_n_bs_particles>0) > 0")
-    h4_mc = gROOT.FindObject("h4_mc")
-    y_mc_bs.append(h4_mc.GetN() / t_mc_4gev.GetEntries() * 100)
-
-    t_mc_5gev.Draw(">>h5_mc", "Sum$(tr2_hit_n_bs_particles>0) > 0")
-    h5_mc = gROOT.FindObject("h5_mc")
-    y_mc_bs.append(h5_mc.GetN() / t_mc_5gev.GetEntries() * 100)
-
-
-
-
-    t_mc_1gev.Draw(">>h1_mc", "Sum$(tr2_hit_n_dir_particles>0) > 1")
-    h1_mc = gROOT.FindObject("h1_mc")
-    y_mc_dir.append(h1_mc.GetN() / t_mc_1gev.GetEntries() * 100)
-
-    t_mc_2gev.Draw(">>h2_mc", "Sum$(tr2_hit_n_dir_particles>0) > 1")
-    h2_mc = gROOT.FindObject("h2_mc")
-    y_mc_dir.append(h2_mc.GetN() / t_mc_2gev.GetEntries() * 100)
-
-    t_mc_3gev.Draw(">>h3_mc", "Sum$(tr2_hit_n_dir_particles>0) > 1")
-    h3_mc = gROOT.FindObject("h3_mc")
-    y_mc_dir.append(h3_mc.GetN() / t_mc_3gev.GetEntries() * 100)
-
-    t_mc_4gev.Draw(">>h4_mc", "Sum$(tr2_hit_n_dir_particles>0) > 1")
-    h4_mc = gROOT.FindObject("h4_mc")
-    y_mc_dir.append(h4_mc.GetN() / t_mc_4gev.GetEntries() * 100)
-
-    t_mc_5gev.Draw(">>h5_mc", "Sum$(tr2_hit_n_dir_particles>0) > 1")
-    h5_mc = gROOT.FindObject("h5_mc")
-    y_mc_dir.append(h5_mc.GetN() / t_mc_5gev.GetEntries() * 100)
-
-    gr_mc_bs = TGraphErrors(5, np.array(x), np.array(y_mc_bs), nullptr, nullptr)
-    gr_mc_bs.SetTitle("MC back-scattered")
-    gr_mc_bs.SetMarkerStyle(20)
-    gr_mc_bs.SetLineColor(1)
-    gr_mc_bs.Draw("APL")
-
-    gr_mc = TGraphErrors(5, np.array(x), np.array(y_mc_dir), nullptr, nullptr)
-    gr_mc.SetTitle("MC pre-scattered")
-    gr_mc.SetMarkerStyle(22)
-    gr_mc.SetLineColor(2)
-    gr_mc.Draw("PLsame")
-
-
-    canvas.BuildLegend()
-
-    input('wait')
-
-
+# Part for fancy ratio plots
 def create_histo(h_name, tree, variable, selection=""):
     h1 = TH1F(h_name, ("Data; E_{hit, tr1}, MIP, mm; #frac{N_{hits}}{N_{events}}, %"), 100, 0, 10)
     h1.SetMarkerStyle(1)
@@ -232,17 +148,93 @@ def ratioplot():
 
     # To hold window open when running from command line
     input('i am finished')
+# Part for fancy ratio plots
 
 
-def splitting():
-    gStyle.SetMarkerStyle(1)
-    h5 = TH2F("h5", "title", 30, 45, 48, 20, 0, 1)
+def probability_2d():
+    h = TH2F("h", "probability_2d", 50, -1.8, 1.8, 50, -1.8, 1.8)
 
-    t_data_5gev.Draw("tr2_hit_energy[1]/(tr2_hit_energy[0]+tr2_hit_energy[1]):cal_cluster_pad[0]>>h5",
-                     "tr2_n_clusters == 1 && tr2_cluster_n_pads == 2 && (tr2_hit_sector[0] == tr2_hit_sector[1])",
-                     "colz")
+    n_events = t_mc_5gev.GetEntries()
 
+    for i, event in enumerate(t_mc_5gev):
+        if i % 1000 == 0:
+            print(i, "event out of", n_events)
+        if event.cal_n_clusters == 0 or event.tr1_n_hits>1 or event.tr2_n_hits >1:
+            continue
+        y_shower = event.cal_cluster_y[0]
+        for y1, prime1 in zip(event.tr1_hit_y, event.tr1_hit_is_prime):
+            for y2, prime2 in zip(event.tr2_hit_y, event.tr2_hit_is_prime):
+                if(prime1 == 1 and prime2 == 1):
+                    d1 = y1 - y_shower
+                    d2 = y2 - y_shower
+                    h.Fill(d1, d2)
+
+    h.GetXaxis().SetTitle("d1, mm")
+    h.GetYaxis().SetTitle("d2, mm")
+    h.Scale(1. / n_events)
+    h.Draw("lego2")
     input("wait")
 
 
-splitting()
+def efficiency():
+    pass
+
+
+def purity():
+    pass
+
+
+def pad_spectra():
+    h_total = TH1F("h_total", "total spectra", 50, 0., 3)
+
+    n_events = t_data_5gev.GetEntries()
+
+    h_arr = []
+    fits_arr = []
+    fits_means = []
+    i = 1
+    gr = TGraph()
+
+    t_data_5gev.Draw("tr2_hit_energy>>h_total", "", "histo norm")
+    fit_total = TF1("fit_total", langaufun, 0.8, 2, 4)
+    fit_total.SetParameters(0.07, 1., 1., 0.1)
+    fit_total.SetParNames("Width", "MP", "Area", "GSigma")
+    fit_total.SetParLimits(0, 0., 0.1)
+    fit_total.SetParLimits(1, 0.8, 1.3)
+    fit_total.SetParLimits(2, 0., 1.)
+    fit_total.SetParLimits(3, 0., 0.5)
+
+    h_total.Fit("fit_total", "R0")
+    total_mean = fit_total.GetParameter(1)
+
+    for pad in range(35, 55):
+        for sector in range(1, 3):
+            h_arr.append(TH1F("h{}".format(sector * 64 + pad), "pad_spectra", 100, 0., 3))
+
+            fits_arr.append(TF1("fit{}".format(sector * 64 + pad), langaufun, 0.8, 2, 4))
+            fits_arr[-1].SetParameters(0.07, 1., 0.03, 0.1)
+            fits_arr[-1].SetParNames("Width", "MP", "Area", "GSigma")
+            fits_arr[-1].SetParLimits(0, 0., 0.1)
+            fits_arr[-1].SetParLimits(1, 0.8, 1.3)
+            fits_arr[-1].SetParLimits(2, 0., 1.)
+            fits_arr[-1].SetParLimits(3, 0., 0.5)
+            h_arr[-1].SetLineColor(i)
+            i += 1
+            if pad == 0 and sector == 0:
+                t_data_5gev.Draw("tr2_hit_energy>>h{}".format(sector*64 + pad), "tr2_hit_pad == {} && tr2_hit_sector == {}".format(pad, sector), "histo norm")
+            else:
+                t_data_5gev.Draw("tr2_hit_energy>>h{}".format(sector*64 + pad), "tr2_hit_pad == {} && tr2_hit_sector == {}".format(pad, sector), "histosame norm")
+                print(pad, "pad")
+
+            h_arr[-1].Fit("fit{}".format(sector * 64 + pad), "R0")
+            fits_means.append(fits_arr[-1].GetParameter(1))
+
+            gr.SetPoint(i, pad, fits_means[-1]/total_mean)
+            input("wait")
+
+    gr.Draw("AP")
+    input("wait")
+
+
+# probability_2d()
+pad_spectra()
