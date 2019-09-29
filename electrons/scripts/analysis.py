@@ -151,37 +151,179 @@ def ratioplot():
 # Part for fancy ratio plots
 
 
-def probability_2d():
-    h = TH2F("h", "probability_2d", 50, -1.8, 1.8, 50, -1.8, 1.8)
+def method1():
+    """Fit the horizontal line through reconstructed shower and hit in tracker2.
+    Calculate expected position of hit in tracker1 from the fit of those 2 points.
+    Plot histo of residuals of expected and measured positions.
+    Plot efficiency and purity points for various cut-off values on the residual."""
+    h_reco_gen = TH1F("h_reco_gen", "title", 800, -20., 20.)
+    h_reco = TH1F("h_reco", "title", 800, -20., 20.)
+    n_gen = 0
 
     n_events = t_mc_5gev.GetEntries()
+    x = np.array([6., 24.])
+    y_err = np.array([0.52, 0.44])
 
     for i, event in enumerate(t_mc_5gev):
         if i % 1000 == 0:
             print(i, "event out of", n_events)
-        if event.cal_n_clusters == 0 or event.tr1_n_hits>1 or event.tr2_n_hits >1:
+        if event.cal_n_clusters == 0:
             continue
-        y_shower = event.cal_cluster_y[0]
-        for y1, prime1 in zip(event.tr1_hit_y, event.tr1_hit_is_prime):
-            for y2, prime2 in zip(event.tr2_hit_y, event.tr2_hit_is_prime):
-                if(prime1 == 1 and prime2 == 1):
-                    d1 = y1 - y_shower
-                    d2 = y2 - y_shower
-                    h.Fill(d1, d2)
 
-    h.GetXaxis().SetTitle("d1, mm")
-    h.GetYaxis().SetTitle("d2, mm")
-    h.Scale(1. / n_events)
-    h.Draw("lego2")
-    input("wait")
+        for y1, p1 in zip(event.tr1_hit_y, event.tr1_hit_is_prime):
+            for y2, p2 in zip(event.tr2_hit_y, event.tr2_hit_is_prime):
+
+                # This is algorithm
+                y = np.array([y2, event.cal_cluster_y[0]])
+                gr_track = TGraphErrors(2, x, y, nullptr, y_err)
+                gr_track.Fit("pol0", "Q")
+                residual = y1 - gr_track.GetFunction("pol0").Eval(1.)
+
+                # there was a track
+                if p1 == 1 and p2 == 1:
+                    n_gen += 1
+                    h_reco_gen.Fill(residual - 0.225)
+
+                h_reco.Fill(residual - 0.225)
+
+    # Get the graph
+    cut_off = np.arange(0., 20., 0.1)
+    eff = []
+    purity = []
+
+    for cut in cut_off:
+        bmin = h_reco_gen.GetXaxis().FindBin(-cut)
+        bmax = h_reco_gen.GetXaxis().FindBin(cut)
+        n_reco_gen = h_reco_gen.Integral(bmin, bmax)
+        n_reco = h_reco.Integral(bmin, bmax)
+
+        if n_gen != 0 and n_reco != 0:
+            eff.append(n_reco_gen / n_gen * 100)
+            purity.append(n_reco_gen / n_reco * 100)
+
+    gr = TGraph(len(cut_off), np.array(eff), np.array(purity))
+    gr.GetXaxis().SetTitle("Efficiency, %")
+    gr.GetYaxis().SetTitle("Purity, %")
+    gr.SetTitle("Tr2 Cal fit")
+
+    return gr
 
 
-def efficiency():
-    pass
+def method2():
+    """Fit the horizontal line through hits in tracker1 and tracker2.
+    Calculate expected position of hit in the calorimeter from the fit of those 2 points.
+    Plot histo of residuals of expected and measured positions of those hits.
+    Plot efficiency and purity points for various cut-off values on the residual."""
+    h_reco_gen = TH1F("h_reco_gen", "title", 800, -20., 20.)
+    h_reco = TH1F("h_reco", "title", 800, -20., 20.)
+    n_gen = 0
+
+    n_events = t_mc_5gev.GetEntries()
+    x = np.array([1., 6.])
+    y_err = np.array([0.52, 0.52])
+
+    for i, event in enumerate(t_mc_5gev):
+        if i % 1000 == 0:
+            print(i, "event out of", n_events)
+        if event.cal_n_clusters == 0:
+            continue
+
+        for y1, p1 in zip(event.tr1_hit_y, event.tr1_hit_is_prime):
+            for y2, p2 in zip(event.tr2_hit_y, event.tr2_hit_is_prime):
+
+                # This is algorithm
+                y = np.array([y1, y2])
+                gr_track = TGraphErrors(2, x, y, nullptr, y_err)
+                gr_track.Fit("pol0", "Q")
+                residual = event.cal_cluster_y[0] - gr_track.GetFunction("pol0").Eval(24.)
+
+                # there was a track
+                if p1 == 1 and p2 == 1:
+                    n_gen += 1
+                    h_reco_gen.Fill(residual)
+
+                h_reco.Fill(residual)
+
+    # Get the graph
+    cut_off = np.arange(0., 20., 0.1)
+    eff = []
+    purity = []
+
+    for cut in cut_off:
+        bmin = h_reco_gen.GetXaxis().FindBin(-cut)
+        bmax = h_reco_gen.GetXaxis().FindBin(cut)
+        n_reco_gen = h_reco_gen.Integral(bmin, bmax)
+        n_reco = h_reco.Integral(bmin, bmax)
+
+        if n_gen != 0 and n_reco != 0:
+            eff.append(n_reco_gen / n_gen * 100)
+            purity.append(n_reco_gen / n_reco * 100)
+
+    gr = TGraph(len(cut_off), np.array(eff), np.array(purity))
+    gr.GetXaxis().SetTitle("Efficiency, %")
+    gr.GetYaxis().SetTitle("Purity, %")
+    gr.SetTitle("Tr1 Tr2 fit")
+
+    return gr
 
 
-def purity():
-    pass
+def method3():
+    """Fit the horizontal line through hits in tracker1, tracker2 and calorimeter.
+    Calculate expected position of hit in the calorimeter from the fit of those 3 points.
+    Plot histo of residuals of expected and measured positions of the shower.
+    Plot efficiency and purity points for various cut-off values on the residual."""
+    h_reco_gen = TH1F("h_reco_gen", "title", 800, -20., 20.)
+    h_reco = TH1F("h_reco", "title", 800, -20., 20.)
+    n_gen = 0
+
+    n_events = t_mc_5gev.GetEntries()
+    x = np.array([1., 6., 24])
+    y_err = np.array([0.52, 0.52, 0.44])
+
+    for i, event in enumerate(t_mc_5gev):
+        if i % 1000 == 0:
+            print(i, "event out of", n_events)
+        if event.cal_n_clusters == 0:
+            continue
+
+        for y1, p1 in zip(event.tr1_hit_y, event.tr1_hit_is_prime):
+            for y2, p2 in zip(event.tr2_hit_y, event.tr2_hit_is_prime):
+
+                # This is algorithm
+                y = np.array([y1, y2, event.cal_cluster_y[0]])
+                gr_track = TGraphErrors(3, x, y, nullptr, y_err)
+                gr_track.Fit("pol0", "Q")
+                residual = event.cal_cluster_y[0] - gr_track.GetFunction("pol0").Eval(24.)
+
+                # there was a track
+                if p1 == 1 and p2 == 1:
+                    n_gen += 1
+                    h_reco_gen.Fill(residual)
+
+                h_reco.Fill(residual)
+
+    # Get the graph
+    cut_off = np.arange(0., 20., 0.1)
+    eff = []
+    purity = []
+
+    for cut in cut_off:
+        bmin = h_reco_gen.GetXaxis().FindBin(-cut)
+        bmax = h_reco_gen.GetXaxis().FindBin(cut)
+        n_reco_gen = h_reco_gen.Integral(bmin, bmax)
+        n_reco = h_reco.Integral(bmin, bmax)
+
+        if n_gen != 0 and n_reco != 0:
+            eff.append(n_reco_gen / n_gen * 100)
+            purity.append(n_reco_gen / n_reco * 100)
+
+    gr = TGraph(len(cut_off), np.array(eff), np.array(purity))
+    gr.GetXaxis().SetTitle("Efficiency, %")
+    gr.GetYaxis().SetTitle("Purity, %")
+    gr.SetTitle("Tr1 Tr2 Cal fit")
+
+    return gr
+
 
 
 def pad_spectra():
@@ -236,5 +378,18 @@ def pad_spectra():
     input("wait")
 
 
-# probability_2d()
-pad_spectra()
+gr1 = method1()
+gr1.Draw("AP")
+
+gr2 = method2()
+gr2.SetMarkerColor(2)
+gr2.SetMarkerStyle(21)
+gr2.Draw("Psame")
+
+gr3 = method3()
+gr3.SetMarkerColor(4)
+gr3.SetMarkerStyle(23)
+gr3.Draw("Psame")
+
+input("wait")
+# pad_spectra()

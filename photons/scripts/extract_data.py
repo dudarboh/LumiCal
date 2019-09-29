@@ -77,9 +77,9 @@ for i in range(16):
 
 def bad_pad(sector, pad, layer):
     """Return true if pad is bad"""
-    return ((layer == 0 and sector == 1 and pad in (26, 61))
-            or (layer == 0 and sector == 2 and pad in (31, 57, 61))
-            or (layer == 2 and sector == 1 and pad in (28, 31, 34))
+    return (#(layer == 0 and sector == 1 and pad in (26, 61))
+            #or (layer == 0 and sector == 2 and pad in (31, 57, 61))
+            (layer == 2 and sector == 1 and pad in (28, 31, 34))
             or (layer == 2 and sector == 2 and pad in (38, 53))
             or (layer == 3 and sector == 2 and pad in (31, 33, 52, 55, 61))
             or (layer == 4 and sector == 1 and pad in (29, 39, 41, 55, 56))
@@ -352,7 +352,7 @@ def make_hits_lists(event):
         layer = hit.layer
 
         if (pad < 20
-           or (layer > 1 and hit.energy <= .5)
+           or (layer > 1 and hit.energy <= 1.4)
            or sector == 0 or sector == 3
            or layer == 7
            or (layer <= 1 and signal < 0.)
@@ -400,8 +400,8 @@ def make_clusters_list(towers_list, det):
     # Sort to start merging the most energetic ones
     clusters.sort(key=lambda x: x.energy, reverse=True)
 
-    # merge_clusters(clusters)
-    # clusters.sort(key=lambda x: x.energy, reverse=True)
+    merge_clusters(clusters)
+    clusters.sort(key=lambda x: x.energy, reverse=True)
 
     return clusters
 
