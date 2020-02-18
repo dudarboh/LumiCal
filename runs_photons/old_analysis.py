@@ -1,11 +1,10 @@
-from ROOT import TFile, gROOT, TGraphErrors, TH1F, TGraph, nullptr, TF1
+from ROOT import TFile, gROOT, TGraphErrors, TH1F, TGraph, nullptr, TF1, TH2F, TCanvas
 import numpy as np
 
 gROOT.SetBatch(0)
 gROOT.SetStyle('ATLAS')
 
-# file_data = TFile.Open("../extracted/extracted_data_5gev.root", 'read')
-file_data = TFile.Open("../extracted/extracted_data_5gev_merged.root", 'read')
+file_data = TFile.Open("./extracted_trees/extracted_data_5gev.root", 'read')
 tree_data = file_data.data
 
 output_file = TFile("output.root", "RECREATE")
@@ -13,14 +12,37 @@ output_file.cd()
 
 
 def plot():
-    h1 = TH1F('h1', 'Clst1', 8, 0, 8)
-    h2 = TH1F('h2', 'Clst2', 8, 0, 8)
-    # for event in tree_data:
-    tree_data.Draw("tr1_n_hits>>h1", "", "histo")
-    h1.SetLineColor(1)
+    h1 = TH1F('h1', 'Clst1', 500, 0., 500.)
+    h2 = TH1F('h2', 'Clst2', 500, 0., 500.)
+    h3 = TH1F('h3', 'Clst3', 500, 0., 500.)
+    h4 = TH1F('h4', 'Clst4', 500, 0., 500.)
 
-    tree_data.Draw("tr2_n_hits>>h2", "", "histosame")
+    h5 = TH2F('h5', 'clst1-clst2', 200, -60., 45., 200, 0., 1.)
+
+    # for event in tree_data:
+    tree_data.Draw("cal_cluster_energy[0]>>h1", "", "histo")
+    tree_data.Draw("cal_cluster_energy[1]>>h2", "", "histosame")
+    tree_data.Draw("cal_cluster_energy[2]>>h3", "", "histosame")
+    tree_data.Draw("cal_cluster_energy[3]>>h4", "", "histosame")
+    h1.SetLineColor(1)
     h2.SetLineColor(2)
+    h3.SetLineColor(3)
+    h4.SetLineColor(4)
+
+    tree_data.Draw("cal_cluster_energy[1]/cal_cluster_energy[0]:(cal_cluster_y[1]-cal_cluster_y[0])>>h5", "", "colz")
+    input("wait")
+
+
+def plot_event():
+    canvas = TCanvas("name", "title", 1024, 768)
+    h = TH2F('h', 'title', 5, 2, 7, 64, 0, 64)
+
+    for idx, ev in enumerate(tree_data):
+        if idx == 100:
+            break
+        if ev.cal_n_clusters > 2:
+            tree_data.Draw("cal_hit_pad:cal_hit_layer>>h", "cal_hit_energy*(Entry$ == {})".format(idx), "colztext")
+            canvas.Print("./{}_entry".format(idx) + ".png")
 
     input("wait")
 
@@ -39,7 +61,7 @@ def electron_identification():
     n_events = tree_data.GetEntries()
     for i, event in enumerate(tree_data):
         if i % 1000 == 0:
-            if i == 50000:
+            if i == 200000:
                 break
             print(i, "event out of", n_events)
         # Good event with clear electron generated and detected by calorimeter and trackers
@@ -103,7 +125,7 @@ def photon_identification():
     n_events = tree_data.GetEntries()
     for i, event in enumerate(tree_data):
         if i % 1000 == 0:
-            if i == 50000:
+            if i == 200000:
                 break
             print(i, "event out of", n_events)
         # Good event with clear electron generated and detected by calorimeter and trackers
@@ -162,4 +184,5 @@ gr1.Draw("AP")
 gr2 = photon_identification()
 gr2.Draw("Psame")
 
+# plot()
 input("wait")
